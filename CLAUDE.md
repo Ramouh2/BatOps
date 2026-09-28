@@ -36,13 +36,18 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
 | `src/lib/store/store.ts` | `createBatopsStore()` zustand + immer + persist (`batops:data` en localStorage). Session **par onglet** (sessionStorage) + dernier profil. |
 | `src/lib/store/index.ts` | Hooks React : `useData`, `useActions`, `useCurrentUser`, `useNavCounters`, `useNow`. |
 | `src/lib/store/mutations.ts` | Primitives partagées pour les actions métier : `takeReference` (numérotation continue), `logActivity` (timeline client). |
+| `src/lib/store/actions/*` | Mutations métier pures `(draft, input, ctx)` : `crm.ts` (clients, conversion, notes, équipements), `catalog.ts` (articles, prix, archivage), `quotes.ts` (relance). Exposées dans `actions` du store avec validation préalable (`MutationResult`). |
 | `src/lib/store/selectors.ts` | Sélecteurs purs (compteurs, interventions du jour, totaux). |
+| `src/lib/store/dashboard.ts` / `crm-selectors.ts` | KPI, courbe d'encaissements, actions urgentes, fil d'activité / lignes CRM, onglets, vue 360°. |
+| `src/lib/domain/validation.ts` | Validation + normalisation des saisies (téléphone FR, code postal, prix `1 450,50`), partagée formulaires / store. |
+| `src/lib/motion.ts` + `src/components/motion/*` | Système de mouvement (voir ci-dessous). |
 | `src/lib/domain/*` | Règles pures : `computeTotals` (TVA par taux, remise, marge), statuts dérivés (`en_retard`, `expire`, `a_planifier`), formats FR, dates locales. |
 | `src/lib/permissions.ts` | 4 rôles (`owner`, `dispatcher`, `technician`, `accountant`), capacités, accès routes, `ROLE_HOME`. |
 | `src/lib/navigation.ts` / `src/lib/modules.ts` | Sidebar (sections, compteurs) / périmètre P0 et sprint de chaque module. |
 | `src/providers/` | `ai/` (devis IA, oublis, rapport, extraction d'appel), `voice/` (Nora V0 + 3 scénarios), `notifications/`, `storage/`, `index.ts` (factory + statut). |
 | `src/components/ui/` | Composants shadcn/ui écrits à la main (le registre shadcn n'est pas joignable depuis l'environnement de dev). |
-| `src/components/layout/` | Shells bureau / terrain, sidebar, topbar, sélecteur de rôle, palette ⌘K, reset démo, garde d'accès. |
+| `src/components/layout/` | Shells bureau / terrain, sidebar, topbar, sélecteur de rôle, palette ⌘K (modules + clients), reset démo, garde d'accès. |
+| `src/components/{dashboard,crm,catalog}/` | Blocs métier du Sprint 1 (KPI, graphique, actions urgentes ; formulaires en tiroir, timeline, parc ; prix éditables, marge). |
 | `src/app/(dashboard)/*` | Espace bureau. `src/app/(field)/tech` app terrain. `src/app/login` entrée démo. |
 
 ## Conventions de code
@@ -61,11 +66,25 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
   dans `actions` du store.
 - Pages : `page.tsx` serveur (metadata) qui rend un composant client connecté au store.
 - Mobile terrain : boutons `size="field"` (56 px), cartes empilées, pas de tableau horizontal.
+- Retour d'une mutation : jamais de proxy immer hors du `set` (les actions renvoient des ids / valeurs primitives).
+  Après une mutation dans un gestionnaire d'événement, lire l'état frais via `batopsStore.getState()`.
+
+## Motion design (système, pas décoration)
+
+- Grammaire unique dans `src/lib/motion.ts` : `EASE_OUT`, `DURATION` (≤ 400 ms hors graphiques), `SPRING`
+  (`snappy` pastilles/onglets, `layout` listes, `pop` confirmations), variantes `fadeUp`, `listItem`, `insertedItem`.
+- Primitives : `Reveal` / `Stagger` / `StaggerItem` (apparitions), `AnimatedNumber` (compteurs, glisse aux mises à jour),
+  `Swap` (statut / compteur qui change), `ProgressBar`, `SuccessCheck`, `useFeedback()` (`flash` succès, `shake` erreur),
+  `SegmentedTabs` / `SegmentedChoice` (pastille glissante `layoutId`), `EmptyState`, transitions de page via `template.tsx`.
+- Listes : `AnimatePresence mode="popLayout"` + `layout` sur les `li` (création, filtre, suppression animés).
+- Uniquement `transform` / `opacity` (et `pathLength` pour les graphiques). `MotionConfig reducedMotion="user"` + règle CSS
+  `prefers-reduced-motion` : aucune animation ne doit porter d'information indispensable.
+- Tests navigateur : attendre la fin des animations (valeurs de `AnimatedNumber`, sorties d'`AnimatePresence`).
 
 ## État des sprints
 
 - [x] **Sprint 0** — fondations : types, seed ClimAir Pro, store, providers, shells, rôles, design system, reset.
-- [ ] Sprint 1 — Dashboard, CRM (clients/prospects/équipements/timeline), catalogue.
+- [x] **Sprint 1** — Dashboard, CRM (clients/prospects/équipements/timeline), catalogue & marges, relance devis, motion design.
 - [ ] Sprint 2 — Devis + IA + marge + aperçu A4 + portail `/portal/[token]` + signature.
 - [ ] Sprint 3 — Interventions + planning/dispatch.
 - [ ] Sprint 4 — App `/tech` + photos + rapport PDF.

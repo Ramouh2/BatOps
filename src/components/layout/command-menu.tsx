@@ -13,11 +13,13 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { UserAvatar } from "@/components/shared/user-avatar";
+import { ClientAvatar } from "@/components/crm/client-avatar";
 import { useCurrentUser, useData } from "@/lib/store";
 import { useUi } from "@/lib/store/ui";
 import { can } from "@/lib/permissions";
 import { FIELD_APP_ITEM, navSectionsFor } from "@/lib/navigation";
-import { ROLE_LABEL } from "@/lib/domain/labels";
+import { CLIENT_STATUS, ROLE_LABEL } from "@/lib/domain/labels";
+import { clientDisplayName } from "@/lib/domain/clients";
 import { useSwitchProfile } from "./use-switch-profile";
 
 /** Palette de commandes (⌘K / Ctrl+K) : navigation, changement de profil, actions de démo. */
@@ -27,6 +29,7 @@ export function CommandMenu() {
   const openReset = useUi((s) => s.setResetDialogOpen);
   const user = useCurrentUser();
   const users = useData((d) => d.users);
+  const clients = useData((d) => d.clients);
   const switchProfile = useSwitchProfile();
   const router = useRouter();
 
@@ -53,7 +56,7 @@ export function CommandMenu() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="Palette de commandes" description="Naviguer dans BATOPS ou lancer une action">
-      <CommandInput placeholder="Aller à un module, changer de profil…" />
+      <CommandInput placeholder="Client, module, profil…" />
       <CommandList>
         <CommandEmpty>Aucun résultat.</CommandEmpty>
         <CommandGroup heading="Aller à">
@@ -64,6 +67,27 @@ export function CommandMenu() {
             </CommandItem>
           ))}
         </CommandGroup>
+        {can(user.role, "manage_clients") ? (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Clients & prospects">
+              {clients.map((client) => (
+                <CommandItem
+                  key={client.id}
+                  value={`client ${clientDisplayName(client)} ${client.city} ${client.phone.replace(/\s/g, "")}`}
+                  onSelect={() => run(() => router.push(`/clients/${client.id}`))}
+                >
+                  <ClientAvatar client={client} className="size-6 rounded-md text-[9px]" />
+                  <span className="truncate">{clientDisplayName(client)}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                    {client.city}
+                    {client.status === "prospect" ? <span className="text-blue-700">{CLIENT_STATUS.prospect.label}</span> : null}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        ) : null}
         <CommandSeparator />
         <CommandGroup heading="Profil de démo">
           {users

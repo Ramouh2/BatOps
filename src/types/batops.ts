@@ -164,6 +164,8 @@ export interface CatalogItem {
   equipment_template?: EquipmentTemplate;
   is_active: boolean;
   created_at: ISODateTime;
+  /** Dernière modification (prix, libellé…) — les documents déjà émis conservent leurs prix. */
+  updated_at?: ISODateTime;
 }
 
 /* ------------------------------------------------------------------ */
@@ -430,6 +432,8 @@ export interface CallLog {
 export type ActivityType =
   | "call"
   | "client_created"
+  | "client_updated"
+  | "client_converted"
   | "quote_created"
   | "quote_sent"
   | "quote_reminder"
@@ -444,6 +448,8 @@ export type ActivityType =
   | "invoice_issued"
   | "payment_received"
   | "equipment_added"
+  | "equipment_updated"
+  | "equipment_removed"
   | "contract_created"
   | "note";
 

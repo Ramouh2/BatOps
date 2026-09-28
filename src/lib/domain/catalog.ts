@@ -26,3 +26,20 @@ export function defaultSectionFor(item: Pick<CatalogItem, "reference" | "categor
       return SECTION.maintenance;
   }
 }
+
+export type MarginLevel = "loss" | "critical" | "low" | "correct" | "excellent";
+
+export interface MarginLevelMeta {
+  level: MarginLevel;
+  label: string;
+  tone: "danger" | "warning" | "info" | "success";
+}
+
+/** Lecture rapide de la marge (en % du prix de vente) pour le badge du catalogue. */
+export function marginLevel(marginPercent: number, marginHt: number): MarginLevelMeta {
+  if (marginHt < 0) return { level: "loss", label: "À perte", tone: "danger" };
+  if (marginPercent < 10) return { level: "critical", label: "Critique", tone: "danger" };
+  if (marginPercent < 25) return { level: "low", label: "Faible", tone: "warning" };
+  if (marginPercent < 40) return { level: "correct", label: "Correcte", tone: "info" };
+  return { level: "excellent", label: "Excellente", tone: "success" };
+}

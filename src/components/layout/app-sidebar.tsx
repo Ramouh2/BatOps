@@ -1,9 +1,12 @@
 "use client";
 
+import { useId } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { ChevronsUpDownIcon, LogOutIcon, RotateCcwIcon, SettingsIcon, SparklesIcon } from "lucide-react";
 import { BatopsMark } from "@/components/brand/logo";
+import { Swap } from "@/components/motion/swap";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +20,7 @@ import { useUi } from "@/lib/store/ui";
 import { can } from "@/lib/permissions";
 import { FIELD_APP_ITEM, navSectionsFor, type NavItem } from "@/lib/navigation";
 import type { NavCounters } from "@/lib/store/selectors";
+import { SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const PLAN_LABEL = { solo: "Solo", equipe: "Équipe", entreprise: "Entreprise" } as const;
@@ -56,23 +60,38 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       title={count > 0 ? hint : undefined}
       className={cn(
-        "group flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900",
-        active && "bg-slate-100 font-medium text-slate-900",
+        "group relative flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-slate-600 transition-colors hover:bg-slate-100/70 hover:text-slate-900",
+        active && "font-medium text-slate-900",
       )}
     >
-      <Icon className={cn("size-4 text-slate-400 group-hover:text-slate-600", active && "text-primary group-hover:text-primary")} strokeWidth={1.75} />
-      <span className="truncate">{label ?? item.label}</span>
-      {count > 0 ? (
-        <span
-          className={cn(
-            "ml-auto min-w-5 rounded-full px-1.5 py-px text-center text-[11px] font-semibold tabular",
-            COUNTER_TONE[item.counterTone ?? "neutral"],
-          )}
-        >
-          <span aria-hidden="true">{count}</span>
-          {hint ? <span className="sr-only">{hint}</span> : null}
-        </span>
+      {active ? (
+        <motion.span layoutId="sidebar-active" className="absolute inset-0 rounded-md bg-slate-100" transition={SPRING.snappy} />
       ) : null}
+      <Icon
+        className={cn("relative size-4 text-slate-400 transition-colors group-hover:text-slate-600", active && "text-primary group-hover:text-primary")}
+        strokeWidth={1.75}
+      />
+      <span className="relative truncate">{label ?? item.label}</span>
+      <AnimatePresence initial={false}>
+        {count > 0 ? (
+          <motion.span
+            key="counter"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={SPRING.pop}
+            className={cn(
+              "relative ml-auto flex min-w-5 justify-center rounded-full px-1.5 py-px text-[11px] font-semibold tabular",
+              COUNTER_TONE[item.counterTone ?? "neutral"],
+            )}
+          >
+            <Swap swapKey={count}>
+              <span aria-hidden="true">{count}</span>
+            </Swap>
+            {hint ? <span className="sr-only">{hint}</span> : null}
+          </motion.span>
+        ) : null}
+      </AnimatePresence>
     </Link>
   );
 }
@@ -129,36 +148,39 @@ function WorkspaceMenu() {
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const user = useCurrentUser();
   const counters = useNavCounters();
+  const layoutGroupId = useId();
   if (!user) return null;
   const sections = navSectionsFor(user.role);
 
   return (
-    <div className="flex h-full w-full flex-col bg-sidebar">
-      <WorkspaceMenu />
-      <nav aria-label="Navigation principale" className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {sections.map((section) => (
-          <div key={section.label}>
-            <p className="px-2 pb-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{section.label}</p>
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink key={item.href} item={item} counters={counters} onNavigate={onNavigate} />
-              ))}
+    <LayoutGroup id={layoutGroupId}>
+      <div className="flex h-full w-full flex-col bg-sidebar">
+        <WorkspaceMenu />
+        <nav aria-label="Navigation principale" className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+          {sections.map((section) => (
+            <div key={section.label}>
+              <p className="px-2 pb-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">{section.label}</p>
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink key={item.href} item={item} counters={counters} onNavigate={onNavigate} />
+                ))}
+              </div>
             </div>
+          ))}
+        </nav>
+        <div className="space-y-3 border-t p-3">
+          {can(user.role, "use_field_app") ? (
+            <NavLink item={FIELD_APP_ITEM} counters={counters} onNavigate={onNavigate} label="Aperçu app technicien" />
+          ) : null}
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+              <SparklesIcon className="size-3.5" />
+              Mode démo gratuit
+            </p>
+            <p className="mt-0.5 text-xs text-amber-800/80">Données locales, IA et Nora simulées · 0 €/mois</p>
           </div>
-        ))}
-      </nav>
-      <div className="space-y-3 border-t p-3">
-        {can(user.role, "use_field_app") ? (
-          <NavLink item={FIELD_APP_ITEM} counters={counters} onNavigate={onNavigate} label="Aperçu app technicien" />
-        ) : null}
-        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2.5">
-          <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
-            <SparklesIcon className="size-3.5" />
-            Mode démo gratuit
-          </p>
-          <p className="mt-0.5 text-xs text-amber-800/80">Données locales, IA et Nora simulées · 0 €/mois</p>
         </div>
       </div>
-    </div>
+    </LayoutGroup>
   );
 }

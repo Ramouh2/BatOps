@@ -89,3 +89,47 @@
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------------------------------------------------------ */
+/* Mouvement                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Carte cliquable : léger soulèvement au survol. */
+@utility interactive-card {
+  transition-property: box-shadow, transform, border-color, background-color;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -8px rgb(15 23 42 / 0.18);
+    border-color: var(--color-slate-300);
+  }
+}
+
+@keyframes batops-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@utility skeleton-shimmer {
+  background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.65) 50%, transparent 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: batops-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Accessibilité : si le système demande moins d'animations, on les réduit à l'instantané. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

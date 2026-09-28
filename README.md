@@ -29,6 +29,10 @@ Profils de démo (sélecteur en haut à droite, ou palette `Ctrl/⌘ K`) :
 
 « Réinitialiser les données de démo » (menu de l'espace, menu profil ou `/settings`) remet la démo à neuf.
 
+Déjà utilisable : tableau de bord du lundi matin (KPI, programme du jour, relance de devis en 1 clic, encaissements),
+CRM (prospects, conversion, fiche 360°, parc d'équipements, timeline, notes) et catalogue (prix d'achat / vente,
+marge recalculée en direct). Les autres modules affichent leur périmètre et leurs données réelles en attendant leur sprint.
+
 ## Scripts
 
 | Commande | Rôle |
@@ -42,7 +46,7 @@ Profils de démo (sélecteur en haut à droite, ou palette `Ctrl/⌘ K`) :
 
 ## Architecture
 
-- **Next.js 15** (App Router) · **TypeScript strict** · **Tailwind CSS 4** · composants **shadcn/ui** (Radix) · **Lucide**
+- **Next.js 15** (App Router) · **TypeScript strict** · **Tailwind CSS 4** · composants **shadcn/ui** (Radix) · **Lucide** · **Motion**
 - `src/types/batops.ts` — modèle de données (miroir de `supabase/migrations/001_batops_schema.sql`)
 - `src/lib/demo/` — jeu de démo ClimAir Pro (catalogue, équipe, clients, devis, interventions, factures…)
 - `src/lib/store/` — store central unique (zustand + immer, persisté) : toutes les vues lisent le même état

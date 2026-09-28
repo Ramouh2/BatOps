@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { DashboardPreview } from "./dashboard-preview";
+import { DashboardView } from "./dashboard-view";
 
 export const metadata: Metadata = { title: "Tableau de bord" };
 
 export default function DashboardPage() {
-  return <DashboardPreview />;
+  return <DashboardView />;
 }

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ModuleRoadmap } from "@/components/modules/module-roadmap";
+import { CatalogView } from "./catalog-view";
 
 export const metadata: Metadata = { title: "Catalogue & tarifs" };
 
 export default function CatalogPage() {
-  return <ModuleRoadmap module="catalog" />;
+  return <CatalogView />;
 }

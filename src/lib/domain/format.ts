@@ -99,3 +99,23 @@ export function initials(fullName: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/** Horodatage relatif d'un événement : `à l'instant`, `il y a 5 min`, `aujourd'hui 14:02`, `hier 16:20`, `21 sept.`. */
+export function formatRelativeTime(value: DateInput, now: Date): string {
+  const date = toDate(value);
+  const minutes = Math.round((now.getTime() - date.getTime()) / 60_000);
+  if (minutes >= 0 && minutes < 1) return "à l'instant";
+  if (minutes >= 1 && minutes < 60) return `il y a ${minutes} min`;
+  const days = diffInCalendarDays(date, now);
+  if (days === 0) return `aujourd'hui ${formatTime(date)}`;
+  if (days === 1) return `hier ${formatTime(date)}`;
+  if (days === -1) return `demain ${formatTime(date)}`;
+  return date.getFullYear() === now.getFullYear() ? formatDayMonth(date) : formatDate(date);
+}
+
+const compact = new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 });
+
+/** `12,5 k €` — axes de graphiques. */
+export function formatEURAxis(amount: number): string {
+  return amount === 0 ? "0 €" : `${compact.format(amount)} €`;
+}

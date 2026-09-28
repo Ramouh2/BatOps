@@ -31,7 +31,7 @@ function SheetContent({
         className={cn(
           "fixed inset-y-0 z-50 flex h-full flex-col bg-card shadow-xl transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300",
           side === "right" &&
-            "right-0 w-[min(28rem,100%)] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+            "right-0 w-[min(32rem,100%)] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
           side === "left" &&
             "left-0 w-[min(18rem,85%)] border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
           className,
@@ -48,6 +48,19 @@ function SheetContent({
   );
 }
 
+function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("flex flex-col gap-1 border-b px-5 py-4 pr-12", className)} {...props} />;
+}
+
+/** Corps défilant du tiroir (le pied reste visible). */
+function SheetBody({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("flex-1 overflow-y-auto px-5 py-5", className)} {...props} />;
+}
+
+function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("flex items-center justify-end gap-2 border-t bg-slate-50/60 px-5 py-3", className)} {...props} />;
+}
+
 function SheetTitle({ className, ...props }: React.ComponentProps<typeof SheetPrimitive.Title>) {
   return <SheetPrimitive.Title className={cn("text-base font-semibold text-slate-900", className)} {...props} />;
 }
@@ -56,4 +69,4 @@ function SheetDescription({ className, ...props }: React.ComponentProps<typeof S
   return <SheetPrimitive.Description className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }
 
-export { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger };
+export { Sheet, SheetBody, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger };

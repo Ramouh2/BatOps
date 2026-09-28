@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Invoice, Quote } from "@/types/batops";
 import { catalogMargin, computeTotals, round2 } from "./money";
-import { formatEUR, formatPercent, formatPhone, formatRelativeDay } from "./format";
+import { formatEUR, formatPercent, formatPhone, formatRelativeDay, formatRelativeTime } from "./format";
 import { getInvoiceDisplayStatus, getQuoteDisplayStatus, invoiceBalance } from "./status";
 import { formatReference, referenceNumber } from "./ids";
 
@@ -59,6 +59,14 @@ describe("formats français", () => {
     expect(formatRelativeDay("2026-09-27", NOW)).toBe("hier");
     expect(formatRelativeDay("2026-09-24", NOW)).toBe("il y a 4 jours");
     expect(formatRelativeDay("2026-10-10", NOW)).toBe("dans 12 jours");
+  });
+
+  it("exprime l'horodatage relatif des événements", () => {
+    expect(formatRelativeTime(new Date(2026, 8, 28, 9, 59, 40), NOW)).toBe("à l'instant");
+    expect(formatRelativeTime(new Date(2026, 8, 28, 9, 55), NOW)).toBe("il y a 5 min");
+    expect(formatRelativeTime(new Date(2026, 8, 28, 7, 12), NOW)).toBe("aujourd'hui 07:12");
+    expect(formatRelativeTime(new Date(2026, 8, 27, 16, 20), NOW)).toBe("hier 16:20");
+    expect(formatRelativeTime(new Date(2026, 8, 21, 16, 20), NOW)).toBe("21 sept.");
   });
 
   it("formate et relit les références", () => {
