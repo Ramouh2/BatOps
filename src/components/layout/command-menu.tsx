@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcwIcon } from "lucide-react";
+import { FilePlusIcon, FileTextIcon, RotateCcwIcon } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -18,7 +18,7 @@ import { useCurrentUser, useData } from "@/lib/store";
 import { useUi } from "@/lib/store/ui";
 import { can } from "@/lib/permissions";
 import { FIELD_APP_ITEM, navSectionsFor } from "@/lib/navigation";
-import { CLIENT_STATUS, ROLE_LABEL } from "@/lib/domain/labels";
+import { CLIENT_STATUS, QUOTE_STATUS, ROLE_LABEL } from "@/lib/domain/labels";
 import { clientDisplayName } from "@/lib/domain/clients";
 import { useSwitchProfile } from "./use-switch-profile";
 
@@ -30,6 +30,7 @@ export function CommandMenu() {
   const user = useCurrentUser();
   const users = useData((d) => d.users);
   const clients = useData((d) => d.clients);
+  const quotes = useData((d) => d.quotes);
   const switchProfile = useSwitchProfile();
   const router = useRouter();
 
@@ -56,7 +57,7 @@ export function CommandMenu() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} title="Palette de commandes" description="Naviguer dans BATOPS ou lancer une action">
-      <CommandInput placeholder="Client, module, profil…" />
+      <CommandInput placeholder="Client, devis, module, profil…" />
       <CommandList>
         <CommandEmpty>Aucun résultat.</CommandEmpty>
         <CommandGroup heading="Aller à">
@@ -85,6 +86,36 @@ export function CommandMenu() {
                   </span>
                 </CommandItem>
               ))}
+            </CommandGroup>
+          </>
+        ) : null}
+        {can(user.role, "read_quotes") ? (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Devis">
+              {can(user.role, "manage_quotes") ? (
+                <CommandItem value="nouveau devis créer" onSelect={() => run(() => router.push("/quotes/new"))}>
+                  <FilePlusIcon />
+                  Nouveau devis
+                </CommandItem>
+              ) : null}
+              {[...quotes]
+                .sort((a, b) => b.reference.localeCompare(a.reference))
+                .map((quote) => {
+                  const client = clients.find((c) => c.id === quote.client_id);
+                  return (
+                    <CommandItem
+                      key={quote.id}
+                      value={`devis ${quote.reference} ${quote.title} ${client ? clientDisplayName(client) : ""}`}
+                      onSelect={() => run(() => router.push(`/quotes/${quote.id}`))}
+                    >
+                      <FileTextIcon />
+                      <span className="shrink-0 font-mono text-xs">{quote.reference}</span>
+                      <span className="truncate">{client ? clientDisplayName(client) : quote.title}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{QUOTE_STATUS[quote.status].label}</span>
+                    </CommandItem>
+                  );
+                })}
             </CommandGroup>
           </>
         ) : null}

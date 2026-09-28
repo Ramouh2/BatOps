@@ -10,16 +10,18 @@
 import { createStore } from "zustand/vanilla";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
-import type { BatopsData } from "@/types/batops";
+import type { BatopsData, MessageChannel } from "@/types/batops";
 import { createDemoData, DEMO_SCHEMA_VERSION } from "@/lib/demo-data";
 import {
   hasErrors,
   validateCatalogItemInput,
   validateClientInput,
   validateEquipmentInput,
+  validateQuoteInput,
   type CatalogItemInput,
   type ClientInput,
   type EquipmentInput,
+  type QuoteInput,
 } from "@/lib/domain/validation";
 import type { NotificationProvider } from "@/providers/notifications/notification.provider";
 import { localStateStorage, safeGet, safeSet } from "./safe-storage";
@@ -40,7 +42,25 @@ import {
   updateCatalogItem,
   type PriceChange,
 } from "./actions/catalog";
-import { applyQuoteReminder, buildQuoteReminder } from "./actions/quotes";
+import {
+  addQuoteComment,
+  applyQuoteReminder,
+  applyQuoteSent,
+  buildQuoteMessage,
+  buildQuoteReminder,
+  createQuote,
+  deleteQuoteDraft,
+  markQuoteViewed,
+  refuseQuote,
+  reopenQuote,
+  signQuote,
+  updateQuote,
+  validateRefusal,
+  validateSignature,
+  type RefusalInput,
+  type SignatureInput,
+  type SignatureResult,
+} from "./actions/quotes";
 
 export const DATA_STORAGE_KEY = "batops:data";
 export const SESSION_STORAGE_KEY = "batops:session";
@@ -81,8 +101,32 @@ export interface BatopsActions {
   deleteCatalogItem(itemId: string): boolean;
 
   /* ---- Devis ---- */
-  /** Relance en 1 clic (e-mail, sinon SMS) via le NotificationProvider. */
-  sendQuoteReminder(quoteId: string): Promise<{ ok: boolean; channel?: "email" | "sms"; to?: string }>;
+  /** Nouveau brouillon (référence continue attribuée à l'enregistrement). */
+  createQuote(input: QuoteInput): MutationResult<string>;
+  /** Enregistre un brouillon : totaux, TVA et marge recalculés. */
+  updateQuote(quoteId: string, input: QuoteInput): MutationResult<true>;
+  /** Devis envoyé repassé en brouillon pour modification. */
+  reopenQuote(quoteId: string): boolean;
+  deleteQuoteDraft(quoteId: string): boolean;
+  /** Envoi du devis avec le lien du portail (e-mail ou SMS) via le NotificationProvider. */
+  sendQuote(quoteId: string, channel?: MessageChannel): Promise<SendOutcome>;
+  /** Relance en 1 clic (e-mail, sinon SMS) avec le lien du portail. */
+  sendQuoteReminder(quoteId: string): Promise<SendOutcome>;
+
+  /* ---- Portail client (actions du client) ---- */
+  markQuoteViewed(quoteId: string): boolean;
+  addQuoteComment(quoteId: string, text: string): boolean;
+  /** Signature : devis signé + intervention préparée « À planifier ». */
+  signQuote(input: SignatureInput): MutationResult<SignatureResult>;
+  refuseQuote(input: RefusalInput): MutationResult<true>;
+}
+
+export interface SendOutcome {
+  ok: boolean;
+  channel?: MessageChannel;
+  to?: string;
+  /** Lien du portail contenu dans le message. */
+  link?: string;
 }
 
 export interface BatopsState {
@@ -107,6 +151,12 @@ export interface CreateBatopsStoreOptions {
   session?: SessionPersistence;
   /** Provider d'envoi (par défaut celui de la factory — Mock gratuit en démo). */
   notifications?: () => NotificationProvider;
+  /** Origine des liens du portail client (par défaut l'URL de l'application). */
+  origin?: () => string;
+}
+
+function defaultOrigin(): string {
+  return typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://localhost:3000";
 }
 
 async function defaultNotifications(): Promise<NotificationProvider> {
@@ -124,8 +174,11 @@ export function createBatopsStore(options: CreateBatopsStoreOptions = {}) {
         /** Instant + auteur (profil de démo courant) de chaque mutation. */
         const context = (): MutationContext => {
           const { data, session } = get();
-          return { now: new Date(), actor: data?.users.find((u) => u.id === session.userId)?.full_name };
+          const user = data?.users.find((u) => u.id === session.userId);
+          return { now: new Date(), actor: user?.full_name, actorId: user?.id };
         };
+        const origin = () => (options.origin ?? defaultOrigin)();
+        const notifications = async () => (options.notifications ? options.notifications() : defaultNotifications());
         /** Applique une mutation sur le brouillon et renvoie sa valeur (jamais un proxy immer). */
         const mutate = <T>(recipe: (draft: BatopsData, ctx: MutationContext) => T): T => {
           const ctx = context();
@@ -221,13 +274,54 @@ export function createBatopsStore(options: CreateBatopsStoreOptions = {}) {
           setCatalogItemActive: (itemId, active) => mutate((draft, ctx) => setCatalogItemActive(draft, itemId, active, ctx)),
           deleteCatalogItem: (itemId) => mutate((draft) => deleteCatalogItem(draft, itemId)),
 
-          sendQuoteReminder: async (quoteId) => {
-            const message = buildQuoteReminder(data(), quoteId, new Date());
+          createQuote: (input) => {
+            const errors = validateQuoteInput(input, data());
+            if (hasErrors(errors)) return fail(errors);
+            return ok(mutate((draft, ctx) => createQuote(draft, input, ctx)));
+          },
+          updateQuote: (quoteId, input) => {
+            const quote = data().quotes.find((q) => q.id === quoteId);
+            if (!quote) return fail({ quote: "Devis introuvable." });
+            if (quote.status !== "brouillon") return fail({ quote: "Seul un brouillon peut être modifié." });
+            const errors = validateQuoteInput({ ...input, client_id: quote.client_id }, data());
+            if (hasErrors(errors)) return fail(errors);
+            mutate((draft, ctx) => updateQuote(draft, quoteId, input, ctx));
+            return ok(true);
+          },
+          reopenQuote: (quoteId) => mutate((draft, ctx) => reopenQuote(draft, quoteId, ctx)),
+          deleteQuoteDraft: (quoteId) => mutate((draft, ctx) => deleteQuoteDraft(draft, quoteId, ctx)),
+          sendQuote: async (quoteId, channel) => {
+            const ctx = context();
+            const message = buildQuoteMessage(data(), quoteId, { origin: origin(), channel, actorId: ctx.actorId, now: ctx.now });
             if (!message) return { ok: false };
-            const provider = options.notifications ? options.notifications() : await defaultNotifications();
-            const result = await provider.send(message);
+            const result = await (await notifications()).send(message);
+            const sent = mutate((draft, mutationCtx) => applyQuoteSent(draft, quoteId, message, result, mutationCtx));
+            return { ok: sent, channel: message.channel, to: message.to, link: message.link };
+          },
+          sendQuoteReminder: async (quoteId) => {
+            const message = buildQuoteReminder(data(), quoteId, new Date(), origin());
+            if (!message) return { ok: false };
+            const result = await (await notifications()).send(message);
             mutate((draft, ctx) => applyQuoteReminder(draft, quoteId, message, result, ctx));
-            return { ok: result.status !== "echec", channel: message.channel, to: message.to };
+            return { ok: result.status !== "echec", channel: message.channel, to: message.to, link: message.link };
+          },
+
+          markQuoteViewed: (quoteId) => {
+            const quote = data().quotes.find((q) => q.id === quoteId);
+            if (!quote || quote.status !== "envoye" || quote.viewed_at) return false;
+            return mutate((draft, ctx) => markQuoteViewed(draft, quoteId, ctx));
+          },
+          addQuoteComment: (quoteId, text) => mutate((draft, ctx) => addQuoteComment(draft, quoteId, text, ctx)),
+          signQuote: (input) => {
+            const errors = validateSignature(data(), input, new Date());
+            if (hasErrors(errors)) return fail(errors);
+            const result = mutate((draft, ctx) => signQuote(draft, input, ctx));
+            return result ? ok(result) : fail({ quote: "Signature impossible." });
+          },
+          refuseQuote: (input) => {
+            const errors = validateRefusal(data(), input);
+            if (hasErrors(errors)) return fail(errors);
+            return mutate((draft, ctx) => refuseQuote(draft, input, ctx)) ? ok(true as const) : fail({ quote: "Refus impossible." });
           },
         },
         };

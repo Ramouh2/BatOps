@@ -9,6 +9,7 @@ import {
   isQuoteAwaitingResponse,
   OPEN_STATUSES,
 } from "@/lib/domain/status";
+import { newestFirst } from "./selectors";
 
 export type ClientTab = "tous" | "prospects" | "clients" | "contrat";
 
@@ -111,7 +112,7 @@ export function selectClient360(data: BatopsData, clientId: string, now: Date): 
     invoices: invoices.sort((a, b) => b.issue_date.localeCompare(a.issue_date)),
     contracts: data.contracts.filter((c) => c.client_id === clientId),
     calls: data.calls.filter((c) => c.client_id === clientId).sort((a, b) => b.created_at.localeCompare(a.created_at)),
-    activities: data.activities.filter((a) => a.client_id === clientId).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    activities: newestFirst(data.activities.filter((a) => a.client_id === clientId)),
     stats: {
       cashCollected: round2(payments.reduce((s, p) => s + p.amount, 0)),
       cashThisMonth: round2(payments.filter((p) => isSameMonth(toDate(p.paid_at), now)).reduce((s, p) => s + p.amount, 0)),

@@ -10,6 +10,17 @@ export const SECTION = {
   extra: "Travaux complémentaires",
 } as const;
 
+/** Ordre d'affichage des sections sur un devis / une facture. */
+export const SECTION_ORDER: string[] = [
+  SECTION.preparation,
+  SECTION.equipment,
+  SECTION.accessories,
+  SECTION.labor,
+  SECTION.travel,
+  SECTION.maintenance,
+  SECTION.extra,
+];
+
 /** Section de devis par défaut d'un article du catalogue (utilisée par le seed et l'assistant devis). */
 export function defaultSectionFor(item: Pick<CatalogItem, "reference" | "category" | "equipment_template">): string {
   if (item.equipment_template) return SECTION.equipment;

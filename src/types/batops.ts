@@ -211,12 +211,20 @@ export interface Quote {
   total_ttc: number;
   estimated_cost_ht: number;
   estimated_margin_ht: number;
+  /** Remise globale saisie en % (le montant `discount_amount_ht` est alors recalculé sur le sous-total). */
+  discount_percent?: number;
   deposit_percent: number;
   conditions?: string;
+  /** Message au client imprimé sous les lignes (précisions sur les travaux). */
+  notes?: string;
+  /** Équipement du parc concerné (remplacement, dépannage…). */
+  equipment_id?: string;
   ai_generated: boolean;
   call_log_id?: string;
   created_by_user_id?: string;
   sent_at?: ISODateTime;
+  /** Première consultation par le client sur son portail. */
+  viewed_at?: ISODateTime;
   last_reminder_at?: ISODateTime;
   signed_at?: ISODateTime;
   signed_by_name?: string;
@@ -224,6 +232,7 @@ export interface Quote {
   refused_at?: ISODateTime;
   refusal_reason?: string;
   created_at: ISODateTime;
+  updated_at?: ISODateTime;
 }
 
 /* ------------------------------------------------------------------ */
@@ -435,7 +444,11 @@ export type ActivityType =
   | "client_updated"
   | "client_converted"
   | "quote_created"
+  | "quote_updated"
+  | "quote_deleted"
   | "quote_sent"
+  | "quote_viewed"
+  | "quote_comment"
   | "quote_reminder"
   | "quote_signed"
   | "quote_refused"

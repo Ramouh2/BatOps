@@ -101,3 +101,15 @@ describe("statuts dérivés", () => {
     expect(getQuoteDisplayStatus({ ...quote, valid_until: "2026-09-28" }, NOW)).toBe("envoye");
   });
 });
+
+describe("recherche de la palette", () => {
+  it("exige chaque mot saisi, sans correspondance floue", async () => {
+    const { wordFilter } = await import("@/lib/search");
+    expect(wordFilter("profil Marc Ouhadda Dirigeant", "marc")).toBe(1);
+    expect(wordFilter("devis DEV-2026-0034 Remplacement chauffe-eau M. Thomas Mercier", "marc")).toBe(0);
+    expect(wordFilter("client Mme Nadia Mansouri Vandœuvre-lès-Nancy", "vandoeuvre")).toBe(1);
+    expect(wordFilter("client Mme Nadia Mansouri Vandœuvre-lès-Nancy", "les nancy")).toBe(1);
+    expect(wordFilter("devis DEV-2026-0041 PAC Bernard", "0041")).toBeGreaterThan(0);
+    expect(wordFilter("aller Planning", "")).toBe(1);
+  });
+});

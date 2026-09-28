@@ -1,8 +1,13 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { ModuleRoadmap } from "@/components/modules/module-roadmap";
+import { QuotesView } from "./quotes-view";
 
 export const metadata: Metadata = { title: "Devis" };
 
 export default function QuotesPage() {
-  return <ModuleRoadmap module="quotes" />;
+  return (
+    <Suspense>
+      <QuotesView />
+    </Suspense>
+  );
 }

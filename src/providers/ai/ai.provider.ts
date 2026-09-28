@@ -33,6 +33,10 @@ export interface QuoteDraft {
   vat_reason: string;
   /** Lignes marquées `ai_suggested`, prix copiés du catalogue. */
   lines: DocumentLine[];
+  /** Explication de chaque ligne proposée (clé : `line.id`). */
+  reasons: Record<string, string>;
+  /** Éléments compris dans la demande (équipement, puissance, prestations), affichés pendant l'analyse. */
+  detected: string[];
   suggestions: MissingItemSuggestion[];
   /** Points à vérifier (quantités estimées, articles absents du catalogue…). */
   warnings: string[];

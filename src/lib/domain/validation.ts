@@ -3,8 +3,10 @@
  * Fonctions pures : utilisées par les formulaires (erreurs en ligne) ET par les actions du store (garde-fou).
  */
 import type {
+  BatopsData,
   CatalogCategory,
   CatalogItem,
+  DocumentLine,
   CatalogUnit,
   Civility,
   ClientSource,
@@ -14,6 +16,8 @@ import type {
   VatRate,
 } from "@/types/batops";
 import { formatPhone } from "./format";
+import { lineTotal, round2 } from "./money";
+import { isVatRate } from "./vat";
 
 export type FieldErrors<K extends string = string> = Partial<Record<K, string>>;
 
@@ -204,5 +208,114 @@ export function normalizeCatalogItemInput(input: CatalogItemInput): CatalogItemI
     selling_price_ht: Math.round(input.selling_price_ht * 100) / 100,
     vat_rate: input.vat_rate,
     supplier_name: trimOrUndefined(input.supplier_name),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Devis                                                               */
+/* ------------------------------------------------------------------ */
+
+export interface QuoteInput {
+  client_id: string;
+  equipment_id?: string;
+  title: string;
+  site_address: string;
+  site_postal_code: string;
+  site_city: string;
+  /** Lignes issues du catalogue (le prix de vente peut être ajusté par le dirigeant). */
+  items: DocumentLine[];
+  discount_amount_ht: number;
+  discount_percent?: number;
+  deposit_percent: number;
+  validity_days: number;
+  conditions?: string;
+  notes?: string;
+  ai_generated: boolean;
+  call_log_id?: string;
+}
+
+export type QuoteField =
+  | "client_id"
+  | "equipment_id"
+  | "title"
+  | "site_address"
+  | "site_postal_code"
+  | "site_city"
+  | "items"
+  | "discount"
+  | "deposit_percent"
+  | "validity_days"
+  | `line:${string}`;
+
+export const QUOTE_LIMITS = { maxLines: 80, maxQty: 10_000, maxValidityDays: 180 } as const;
+
+export function validateQuoteInput(
+  input: QuoteInput,
+  data: Pick<BatopsData, "clients" | "equipment" | "catalog">,
+): FieldErrors<QuoteField> {
+  const errors: FieldErrors<QuoteField> = {};
+  if (!data.clients.some((c) => c.id === input.client_id)) errors.client_id = "Choisissez un client.";
+  if (input.equipment_id && !data.equipment.some((e) => e.id === input.equipment_id && e.client_id === input.client_id)) {
+    errors.equipment_id = "Cet équipement n'appartient pas au client.";
+  }
+  if (!input.title.trim()) errors.title = "Donnez un objet au devis.";
+  else if (input.title.trim().length > 160) errors.title = "Objet trop long (160 caractères max).";
+  if (!input.site_address.trim()) errors.site_address = "Adresse du chantier requise.";
+  if (!/^\d{5}$/.test(input.site_postal_code.trim())) errors.site_postal_code = "Code postal à 5 chiffres.";
+  if (!input.site_city.trim()) errors.site_city = "Ville requise.";
+
+  if (input.items.length === 0) errors.items = "Ajoutez au moins une ligne du catalogue.";
+  else if (input.items.length > QUOTE_LIMITS.maxLines) errors.items = `${QUOTE_LIMITS.maxLines} lignes maximum.`;
+  for (const line of input.items) {
+    if (!line.catalog_item_id || !data.catalog.some((c) => c.id === line.catalog_item_id)) {
+      errors[`line:${line.id}`] = "Article absent du catalogue : aucun prix ne peut être inventé.";
+    } else if (!Number.isFinite(line.qty) || line.qty <= 0 || line.qty > QUOTE_LIMITS.maxQty) {
+      errors[`line:${line.id}`] = "Quantité invalide.";
+    } else if (!Number.isFinite(line.unit_price_ht) || line.unit_price_ht < 0) {
+      errors[`line:${line.id}`] = "Prix unitaire invalide.";
+    } else if (!isVatRate(line.vat_rate)) {
+      errors[`line:${line.id}`] = "Taux de TVA invalide.";
+    }
+  }
+
+  const subtotal = round2(input.items.reduce((sum, l) => sum + lineTotal(l.qty, l.unit_price_ht), 0));
+  if (input.discount_percent !== undefined) {
+    if (!Number.isFinite(input.discount_percent) || input.discount_percent < 0 || input.discount_percent > 100) {
+      errors.discount = "Remise entre 0 et 100 %.";
+    }
+  } else if (!Number.isFinite(input.discount_amount_ht) || input.discount_amount_ht < 0) {
+    errors.discount = "Remise invalide.";
+  } else if (input.discount_amount_ht > subtotal) {
+    errors.discount = "La remise dépasse le sous-total.";
+  }
+  if (!Number.isFinite(input.deposit_percent) || input.deposit_percent < 0 || input.deposit_percent > 100) {
+    errors.deposit_percent = "Acompte entre 0 et 100 %.";
+  }
+  if (!Number.isInteger(input.validity_days) || input.validity_days < 1 || input.validity_days > QUOTE_LIMITS.maxValidityDays) {
+    errors.validity_days = `Validité entre 1 et ${QUOTE_LIMITS.maxValidityDays} jours.`;
+  }
+  return errors;
+}
+
+/** Nettoie un devis valide : textes, quantités et totaux de ligne recalculés. */
+export function normalizeQuoteInput(input: QuoteInput): QuoteInput {
+  return {
+    ...input,
+    equipment_id: input.equipment_id || undefined,
+    title: input.title.trim(),
+    site_address: input.site_address.trim(),
+    site_postal_code: input.site_postal_code.trim(),
+    site_city: input.site_city.trim(),
+    items: input.items.map((line) => {
+      const qty = round2(line.qty);
+      const unit_price_ht = round2(line.unit_price_ht);
+      return { ...line, qty, unit_price_ht, total_ht: lineTotal(qty, unit_price_ht) };
+    }),
+    discount_amount_ht: round2(input.discount_amount_ht),
+    discount_percent: input.discount_percent === undefined ? undefined : round2(input.discount_percent),
+    deposit_percent: round2(input.deposit_percent),
+    conditions: trimOrUndefined(input.conditions),
+    notes: trimOrUndefined(input.notes),
+    call_log_id: input.call_log_id || undefined,
   };
 }

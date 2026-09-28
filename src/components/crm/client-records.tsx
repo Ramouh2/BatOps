@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "motion/react";
 import { FileTextIcon, ReceiptTextIcon, WrenchIcon } from "lucide-react";
 import type { Intervention, Invoice, MaintenanceContract, Quote, User } from "@/types/batops";
@@ -30,13 +31,13 @@ function Rows({ children }: { children: React.ReactNode }) {
 
 function Row({ children }: { children: React.ReactNode }) {
   return (
-    <motion.li variants={fadeUp} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-slate-50/70">
+    <motion.li variants={fadeUp} className="relative flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-slate-50/70">
       {children}
     </motion.li>
   );
 }
 
-/** Devis et factures du client (lecture ; l'édition arrive avec les modules Devis et Factures). */
+/** Devis (ouvrables) et factures du client (lecture ; l'édition des factures arrive au Sprint 5). */
 export function ClientDocuments({ quotes, invoices, showAmounts }: { quotes: Quote[]; invoices: Invoice[]; showAmounts: boolean }) {
   const now = useNow();
   return (
@@ -50,7 +51,12 @@ export function ClientDocuments({ quotes, invoices, showAmounts }: { quotes: Quo
             {quotes.map((q) => (
               <Row key={q.id}>
                 <span className="font-mono text-xs text-slate-500">{q.reference}</span>
-                <span className="min-w-0 flex-1 truncate text-sm text-slate-900">{q.title}</span>
+                <Link
+                  href={`/quotes/${q.id}`}
+                  className="min-w-0 flex-1 truncate text-sm text-slate-900 outline-none after:absolute after:inset-0 after:content-[''] hover:text-primary focus-visible:after:rounded-md focus-visible:after:ring-[3px] focus-visible:after:ring-ring/40"
+                >
+                  {q.title}
+                </Link>
                 <StatusBadge meta={QUOTE_STATUS[getQuoteDisplayStatus(q, now)]} />
                 {showAmounts ? <span className="w-28 text-right text-sm font-medium text-slate-900 tabular">{formatEUR(q.total_ttc)}</span> : null}
                 <span className="w-24 text-right text-xs text-muted-foreground tabular">{formatDate(q.issue_date)}</span>

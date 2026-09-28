@@ -133,3 +133,40 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Impression (devis → « Enregistrer au format PDF » du navigateur)     */
+/* ------------------------------------------------------------------ */
+
+.print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 13mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+  .print-root {
+    display: block;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-root .quote-document {
+    font-size: 9.5pt;
+  }
+  .print-root tr,
+  .print-root li {
+    break-inside: avoid;
+  }
+  .print-root thead {
+    display: table-header-group;
+  }
+}

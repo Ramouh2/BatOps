@@ -12,7 +12,7 @@ import {
   isReadyToInvoice,
   quoteNeedsReminder,
 } from "@/lib/domain/status";
-import { selectInterventionsOfDay } from "./selectors";
+import { newestFirst, selectInterventionsOfDay } from "./selectors";
 
 export interface DashboardKpis {
   cashThisMonth: number;
@@ -168,5 +168,5 @@ export function selectReadyToInvoice(data: BatopsData): Intervention[] {
 }
 
 export function selectRecentActivities(data: BatopsData, limit = 8): ClientActivity[] {
-  return [...data.activities].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit);
+  return newestFirst(data.activities).slice(0, limit);
 }

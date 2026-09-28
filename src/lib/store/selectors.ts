@@ -14,6 +14,17 @@ import {
 } from "@/lib/domain/status";
 import { round2 } from "@/lib/domain/money";
 
+/**
+ * Événements du plus récent au plus ancien. À instant égal (plusieurs événements journalisés dans la même
+ * milliseconde, ex. signature → conversion → intervention), le dernier journalisé passe devant.
+ */
+export function newestFirst<T extends { created_at: string }>(items: T[]): T[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => b.item.created_at.localeCompare(a.item.created_at) || b.index - a.index)
+    .map((entry) => entry.item);
+}
+
 export function selectUser(data: BatopsData, userId: string | null): User | null {
   return data.users.find((u) => u.id === userId) ?? null;
 }

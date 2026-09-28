@@ -30,16 +30,17 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
 
 | Chemin | Rôle |
 | --- | --- |
-| `src/types/batops.ts` | Modèle de données (snake_case = colonnes SQL). Miroir de `supabase/migrations/001_batops_schema.sql` — garder les deux synchronisés. |
+| `src/types/batops.ts` | Modèle de données (snake_case = colonnes SQL). Miroir de `supabase/migrations/*.sql` (001 schéma, 002 catalogue, 003 devis/portail) — garder les deux synchronisés, migrations additives uniquement. |
 | `src/lib/demo/seed.ts` | `createDemoData(now)` : jeu ClimAir Pro **déterministe et relatif à `now`** (ids lisibles, références ancrées : Bernard = `DEV-2026-0041`, Mercier = `FAC-2026-0084`). |
 | `src/lib/demo/catalog.ts` | Pricebook (prix achat/vente HT, TVA, gabarits d'équipement). |
 | `src/lib/store/store.ts` | `createBatopsStore()` zustand + immer + persist (`batops:data` en localStorage). Session **par onglet** (sessionStorage) + dernier profil. |
 | `src/lib/store/index.ts` | Hooks React : `useData`, `useActions`, `useCurrentUser`, `useNavCounters`, `useNow`. |
 | `src/lib/store/mutations.ts` | Primitives partagées pour les actions métier : `takeReference` (numérotation continue), `logActivity` (timeline client). |
-| `src/lib/store/actions/*` | Mutations métier pures `(draft, input, ctx)` : `crm.ts` (clients, conversion, notes, équipements), `catalog.ts` (articles, prix, archivage), `quotes.ts` (relance). Exposées dans `actions` du store avec validation préalable (`MutationResult`). |
+| `src/lib/store/actions/*` | Mutations métier pures `(draft, input, ctx)` : `crm.ts` (clients, conversion, notes, équipements), `catalog.ts` (articles, prix, archivage), `quotes.ts` (brouillon, envoi + lien portail, relance, consultation, remarque, signature → intervention préparée, refus, retour en brouillon). Exposées dans `actions` du store avec validation préalable (`MutationResult`). |
 | `src/lib/store/selectors.ts` | Sélecteurs purs (compteurs, interventions du jour, totaux). |
-| `src/lib/store/dashboard.ts` / `crm-selectors.ts` | KPI, courbe d'encaissements, actions urgentes, fil d'activité / lignes CRM, onglets, vue 360°. |
-| `src/lib/domain/validation.ts` | Validation + normalisation des saisies (téléphone FR, code postal, prix `1 450,50`), partagée formulaires / store. |
+| `src/lib/store/dashboard.ts` / `crm-selectors.ts` / `quote-selectors.ts` | KPI, courbe d'encaissements, actions urgentes, fil d'activité / lignes CRM, onglets, vue 360° / liste et KPI devis, détail, portail (jamais de brouillon côté client). |
+| `src/lib/domain/validation.ts` | Validation + normalisation des saisies (téléphone FR, code postal, prix `1 450,50`, devis : lignes du catalogue uniquement), partagée formulaires / store. |
+| `src/lib/domain/quotes.ts` / `vat.ts` / `portal.ts` / `checklists.ts` | Totaux avec remise %/€, acompte, conditions par défaut, sections, plan d'intervention à la signature / TVA recommandée (partagée IA + éditeur) / liens `/portal/[token]?devis=` / checklists types. |
 | `src/lib/motion.ts` + `src/components/motion/*` | Système de mouvement (voir ci-dessous). |
 | `src/lib/domain/*` | Règles pures : `computeTotals` (TVA par taux, remise, marge), statuts dérivés (`en_retard`, `expire`, `a_planifier`), formats FR, dates locales. |
 | `src/lib/permissions.ts` | 4 rôles (`owner`, `dispatcher`, `technician`, `accountant`), capacités, accès routes, `ROLE_HOME`. |
@@ -48,7 +49,9 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
 | `src/components/ui/` | Composants shadcn/ui écrits à la main (le registre shadcn n'est pas joignable depuis l'environnement de dev). |
 | `src/components/layout/` | Shells bureau / terrain, sidebar, topbar, sélecteur de rôle, palette ⌘K (modules + clients), reset démo, garde d'accès. |
 | `src/components/{dashboard,crm,catalog}/` | Blocs métier du Sprint 1 (KPI, graphique, actions urgentes ; formulaires en tiroir, timeline, parc ; prix éditables, marge). |
-| `src/app/(dashboard)/*` | Espace bureau. `src/app/(field)/tech` app terrain. `src/app/login` entrée démo. |
+| `src/components/quotes/` | Espace devis : `quote-workspace` (en-tête + frise de statut, bascule éditeur ↔ document), `use-quote-editor` (copie de travail, rien n'est écrit avant « Enregistrer »), `quote-ai-assistant`, `quote-lines`, `catalog-picker`, `quote-summary` (totaux, marge), `quote-document` (A4 / compact), `a4-paper` (mise à l'échelle + `PrintRoot`), `send-quote-sheet`, `signature-pad`. |
+| `src/components/portal/` + `src/app/portal/[token]` | Portail client public : consultation, signature (tracé ou générée depuis le nom), refus motivé, remarques. |
+| `src/app/(dashboard)/*` | Espace bureau (`/quotes`, `/quotes/new?client=`, `/quotes/[id]`). `src/app/(field)/tech` app terrain. `src/app/login` entrée démo. `src/app/portal/[token]` portail client (hors coquille, sans compte). |
 
 ## Conventions de code
 
@@ -68,6 +71,12 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
 - Mobile terrain : boutons `size="field"` (56 px), cartes empilées, pas de tableau horizontal.
 - Retour d'une mutation : jamais de proxy immer hors du `set` (les actions renvoient des ids / valeurs primitives).
   Après une mutation dans un gestionnaire d'événement, lire l'état frais via `batopsStore.getState()`.
+- Devis : une ligne vient **toujours** d'un article du catalogue (`lineFromCatalogItem`, validation « aucun prix ne peut
+  être inventé ») ; seul le dirigeant peut ajuster un prix de ligne (badge « Prix ajusté », retour au prix catalogue).
+  L'IA passe par `getAIProvider()` (Mock par défaut) et ne fait que choisir articles et quantités.
+- Actions du portail (consultation, remarque, signature, refus) : l'auteur affiché est le **client**, jamais le profil
+  de démo de l'onglet. Les brouillons ne sont jamais exposés sur le portail.
+- Impression / PDF : `PrintRoot` monte une copie du document sous `<body>` ; la CSS `@media print` n'imprime qu'elle.
 
 ## Motion design (système, pas décoration)
 
@@ -77,6 +86,9 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
   `Swap` (statut / compteur qui change), `ProgressBar`, `SuccessCheck`, `useFeedback()` (`flash` succès, `shake` erreur),
   `SegmentedTabs` / `SegmentedChoice` (pastille glissante `layoutId`), `EmptyState`, transitions de page via `template.tsx`.
 - Listes : `AnimatePresence mode="popLayout"` + `layout` sur les `li` (création, filtre, suppression animés).
+- Devis : `QuoteStatusTrack` (frise Brouillon → Envoyé → Signé), étapes d'analyse IA + résultats en cascade,
+  `QuoteDocument reveal` (feuille A4 qui monte, blocs en cascade), `QuoteMargin` (jauge + halo au changement de palier),
+  sceau de signature, toast d'enregistrement `showQuoteSavedToast`. Seuls temps minimaux voulus : analyse IA ≈ 1,2 s, scellement de la signature 0,35 s.
 - Uniquement `transform` / `opacity` (et `pathLength` pour les graphiques). `MotionConfig reducedMotion="user"` + règle CSS
   `prefers-reduced-motion` : aucune animation ne doit porter d'information indispensable.
 - Tests navigateur : attendre la fin des animations (valeurs de `AnimatedNumber`, sorties d'`AnimatePresence`).
@@ -85,7 +97,7 @@ npm run check        # les 4 à la suite — obligatoire avant de clore un sprin
 
 - [x] **Sprint 0** — fondations : types, seed ClimAir Pro, store, providers, shells, rôles, design system, reset.
 - [x] **Sprint 1** — Dashboard, CRM (clients/prospects/équipements/timeline), catalogue & marges, relance devis, motion design.
-- [ ] Sprint 2 — Devis + IA + marge + aperçu A4 + portail `/portal/[token]` + signature.
+- [x] **Sprint 2** — Devis (éditeur, IA, marge, aperçu A4, impression), envoi + relance avec lien portail, portail `/portal/[token]` (signature, refus, remarques), intervention préparée à la signature.
 - [ ] Sprint 3 — Interventions + planning/dispatch.
 - [ ] Sprint 4 — App `/tech` + photos + rapport PDF.
 - [ ] Sprint 5 — Factures, acomptes, avoirs, paiements, contrats SAV, paramètres éditables.

@@ -5,10 +5,11 @@
  * de l'entreprise et des quantités ; si un article nécessaire n'existe pas, il le signale.
  */
 import type { CatalogItem, DocumentLine, VatRate } from "@/types/batops";
-import { SECTION, defaultSectionFor } from "@/lib/domain/catalog";
+import { SECTION_ORDER, defaultSectionFor } from "@/lib/domain/catalog";
 import { createId } from "@/lib/domain/ids";
 import { lineTotal } from "@/lib/domain/money";
 import { formatNumber } from "@/lib/domain/format";
+import { recommendVat } from "@/lib/domain/vat";
 import { capitalize, normalize, parseNumber } from "@/providers/text";
 import type { MissingItemSuggestion, QuoteDraft, QuoteDraftContext } from "./ai.provider";
 
@@ -17,17 +18,9 @@ interface Wanted {
   qty: number;
   /** Libellé lisible pour les messages d'avertissement. */
   label: string;
+  /** Pourquoi la ligne est proposée (affiché à l'utilisateur). */
+  reason: string;
 }
-
-const SECTION_ORDER: string[] = [
-  SECTION.preparation,
-  SECTION.equipment,
-  SECTION.accessories,
-  SECTION.labor,
-  SECTION.travel,
-  SECTION.maintenance,
-  SECTION.extra,
-];
 
 const KNOWN_BRANDS = [
   "daikin",
@@ -65,10 +58,10 @@ function analyze(prompt: string): Analysis {
   const has = (re: RegExp) => re.test(t);
   const wanted = new Map<string, Wanted>();
   const warnings: string[] = [];
-  const add = (ref: string, qty: number, label: string) => {
+  const add = (ref: string, qty: number, label: string, reason: string) => {
     const existing = wanted.get(ref);
     if (existing) existing.qty += qty;
-    else wanted.set(ref, { ref, qty, label });
+    else wanted.set(ref, { ref, qty, label, reason });
   };
 
   const titles: string[] = [];
@@ -94,9 +87,9 @@ function analyze(prompt: string): Analysis {
 
   // ---- PAC Air/Eau -------------------------------------------------------
   if (isPacAirEau) {
-    add("PAC-ATL-8", 1, "PAC Air/Eau");
-    add("ACC-KIT-HYD", 1, "kit de raccordement hydraulique");
-    add("FOR-MES-PAC", 1, "mise en service PAC");
+    add("PAC-ATL-8", 1, "PAC Air/Eau", "PAC Air/Eau demandée : modèle 8 kW de votre catalogue.");
+    add("ACC-KIT-HYD", 1, "kit de raccordement hydraulique", "Indispensable pour raccorder la PAC au circuit de chauffage existant.");
+    add("FOR-MES-PAC", 1, "mise en service PAC", has(/mise en service/) ? "Mise en service demandée : paramétrage de la loi d'eau et garantie constructeur." : "Mise en service constructeur : conditionne la garantie de la PAC.");
     laborRef = "MO-FRIG";
     laborHours += 16;
     if (requestedKw !== undefined && Math.abs(requestedKw - 8) > 0.5) {
@@ -105,7 +98,7 @@ function analyze(prompt: string): Analysis {
     titles.push("Installation PAC Air/Eau Atlantic 8 kW");
   }
   if (has(/fioul/)) {
-    add("FOR-DEP-FIOUL", 1, "dépose chaudière fioul");
+    add("FOR-DEP-FIOUL", 1, "dépose chaudière fioul", "Dépose de l'ancienne chaudière fioul mentionnée dans la demande.");
     laborHours += isPacAirEau ? 5 : 0;
     titles.push(isPacAirEau ? "en remplacement de la chaudière fioul" : "Dépose chaudière fioul");
   }
@@ -127,10 +120,10 @@ function analyze(prompt: string): Analysis {
 
     const isMulti = units.length >= 2 || !!multiKind;
     if (isMulti) {
-      add("CLIM-DAI-UE3", 1, "groupe extérieur multi-split");
+      add("CLIM-DAI-UE3", 1, "groupe extérieur multi-split", `Groupe extérieur multi-split pour ${Math.max(units.length, 2)} unités intérieures.`);
       for (const kw of units) {
         if (kw > 3.5) warnings.push(`Unité intérieure de ${formatNumber(kw)} kW absente du catalogue multi-split : 3,5 kW proposée.`);
-        add(kw <= 2.5 ? "CLIM-DAI-UI20" : "CLIM-DAI-UI35", 1, "unité intérieure murale");
+        add(kw <= 2.5 ? "CLIM-DAI-UI20" : "CLIM-DAI-UI35", 1, "unité intérieure murale", "Unités intérieures murales selon les pièces demandées.");
       }
       if (units.length > 3) warnings.push("Le groupe extérieur du catalogue accepte 3 unités intérieures maximum.");
       laborHours += 5 + 4 * (Math.max(units.length, 2) - 1);
@@ -138,7 +131,7 @@ function analyze(prompt: string): Analysis {
       titles.push(`Climatisation réversible ${prefix}-split Daikin (${units.length} unités intérieures)`);
     } else {
       const kw = units[0] ?? requestedKw ?? 3.5;
-      add(kw >= 4.5 ? "CLIM-DAI-M50" : "CLIM-DAI-M35", 1, "climatisation mono-split");
+      add(kw >= 4.5 ? "CLIM-DAI-M50" : "CLIM-DAI-M35", 1, "climatisation mono-split", `Climatisation mono-split ${kw >= 4.5 ? "5,0" : "3,5"} kW adaptée à la puissance ${(units[0] ?? requestedKw) !== undefined ? "demandée" : "standard d'une pièce de vie"}.`);
       laborHours += 5;
       titles.push(`Climatisation réversible mono-split Daikin ${kw >= 4.5 ? "5,0" : "3,5"} kW`);
     }
@@ -151,36 +144,41 @@ function analyze(prompt: string): Analysis {
     const length = lengthMatch ? parseNumber(lengthMatch[1]) : 5 * unitCount;
     if (!lengthMatch) warnings.push(`Longueur de liaisons frigorifiques estimée à ${length} m : à confirmer à la visite technique.`);
     const bigUnit = wanted.has("CLIM-DAI-M50");
-    add(bigUnit ? "ACC-LIAIS-12" : "ACC-LIAIS-38", length, "liaisons frigorifiques");
-    if (has(/goulotte/)) add("ACC-GOUL", length, "goulotte de finition");
-    add("FOR-MES-R32", 1, "mise en service R32");
+    add(
+      bigUnit ? "ACC-LIAIS-12" : "ACC-LIAIS-38",
+      length,
+      "liaisons frigorifiques",
+      lengthMatch ? `Longueur de liaisons indiquée : ${formatNumber(length)} m.` : `Longueur estimée à ${formatNumber(length)} m (5 m par unité), à confirmer.`,
+    );
+    if (has(/goulotte/)) add("ACC-GOUL", length, "goulotte de finition", "Goulotte de finition mentionnée, sur la longueur des liaisons.");
+    add("FOR-MES-R32", 1, "mise en service R32", "Tirage au vide et contrôle d'étanchéité obligatoires (fluide R32).");
   }
 
   // ---- Eau chaude, chauffage, ventilation --------------------------------
   if (isCet) {
-    add("CET-THE-200", 1, "chauffe-eau thermodynamique");
-    add("ACC-GS", 1, "groupe de sécurité");
-    if (has(/remplac|depose|ancien/)) add("FOR-DEP-CE", 1, "dépose de l'ancien chauffe-eau");
+    add("CET-THE-200", 1, "chauffe-eau thermodynamique", "Chauffe-eau thermodynamique demandé : modèle 200 L de votre catalogue.");
+    add("ACC-GS", 1, "groupe de sécurité", "Groupe de sécurité neuf obligatoire sur un ballon d'eau chaude (NF).");
+    if (has(/remplac|depose|ancien/)) add("FOR-DEP-CE", 1, "dépose de l'ancien chauffe-eau", "Remplacement mentionné : dépose et évacuation de l'ancien chauffe-eau.");
     laborRef = laborRef ?? "MO-CHAU";
     laborHours += 6;
     titles.push("Pose d'un chauffe-eau thermodynamique Thermor 200 L");
   }
   if (isGasBoiler) {
-    add("CHAU-VIE-25", 1, "chaudière gaz à condensation");
-    add("ACC-VENT", 1, "kit ventouse");
+    add("CHAU-VIE-25", 1, "chaudière gaz à condensation", "Chaudière gaz à condensation demandée.");
+    add("ACC-VENT", 1, "kit ventouse", "Évacuation des fumées adaptée à une chaudière à condensation.");
     laborRef = laborRef ?? "MO-CHAU";
     laborHours += 10;
     titles.push("Remplacement par une chaudière gaz à condensation");
   }
   if (isAirCurtain) {
-    add("RID-FRI-15", 1, "rideau d'air");
+    add("RID-FRI-15", 1, "rideau d'air", "Rideau d'air demandé.");
     laborRef = laborRef ?? "MO-ELEC";
     laborHours += 4;
     titles.push("Remplacement du rideau d'air");
   }
   if (isVmc) {
-    add("VMC-ALD-250", 1, "caisson VMC");
-    add("FOR-MES-VMC", 1, "mise en service VMC");
+    add("VMC-ALD-250", 1, "caisson VMC", "Caisson VMC demandé.");
+    add("FOR-MES-VMC", 1, "mise en service VMC", "Réglage des débits et contrôle à la mise en service.");
     laborRef = laborRef ?? "MO-ELEC";
     laborHours += 6;
     titles.push("Remplacement du caisson VMC collective");
@@ -188,18 +186,18 @@ function analyze(prompt: string): Analysis {
 
   // ---- Mentions explicites ------------------------------------------------
   if (has(/desembou/)) {
-    add("FOR-DESEMB", 1, "désembouage");
+    add("FOR-DESEMB", 1, "désembouage", "Désembouage mentionné dans la demande.");
     titles.push("désembouage");
   }
-  if (has(/relevage|sauermann/)) add("ACC-POMPE-SI27", 1, "pompe de relevage");
-  if (has(/anti.?vibra/)) add("ACC-SUPP-AV", 1, "supports anti-vibratiles");
-  if (has(/disjoncteur|protection electrique|ligne (electrique )?dediee/)) add("ACC-DISJ", 1, "protection électrique dédiée");
-  if (has(/pot a boue|filtre magnetique/)) add("ACC-POT-BOUE", 1, "pot à boue");
+  if (has(/relevage|sauermann/)) add("ACC-POMPE-SI27", 1, "pompe de relevage", "Pompe de relevage des condensats mentionnée.");
+  if (has(/anti.?vibra/)) add("ACC-SUPP-AV", 1, "supports anti-vibratiles", "Supports anti-vibratiles mentionnés.");
+  if (has(/disjoncteur|protection electrique|ligne (electrique )?dediee/)) add("ACC-DISJ", 1, "protection électrique dédiée", "Protection électrique dédiée mentionnée.");
+  if (has(/pot a boue|filtre magnetique/)) add("ACC-POT-BOUE", 1, "pot à boue", "Pot à boue mentionné dans la demande.");
 
   // ---- Dépannage / entretien seuls ---------------------------------------
   if (isRepair && !isInstallation) {
-    add("DEP-DIAG", 1, "déplacement & diagnostic");
-    if (has(/urgen|week-end|weekend|soir|nuit|dimanche/)) add("DEP-URG", 1, "majoration urgence");
+    add("DEP-DIAG", 1, "déplacement & diagnostic", "Panne décrite : déplacement et diagnostic sur place.");
+    if (has(/urgen|week-end|weekend|soir|nuit|dimanche/)) add("DEP-URG", 1, "majoration urgence", "Intervention urgente ou hors horaires mentionnée.");
     const climContext = has(/clim|split|climatisation|condensat|relevage/);
     laborRef = climContext ? "MO-FRIG" : "MO-CHAU";
     laborHours += 1;
@@ -207,14 +205,23 @@ function analyze(prompt: string): Analysis {
   }
   if (isMaintenance && !isInstallation && !isRepair) {
     const ref = has(/vmc/) ? "MAINT-VMC" : has(/\bpac\b|pompe a chaleur/) ? "MAINT-PAC" : has(/gainable|rideau|restaurant|commerce/) ? "MAINT-PRO" : "MAINT-CLIM";
-    add(ref, 1, "contrat d'entretien annuel");
+    add(ref, 1, "contrat d'entretien annuel", "Entretien annuel demandé.");
     titles.push("Contrat d'entretien annuel");
   }
 
   // ---- Main-d'œuvre -------------------------------------------------------
   const hoursMatch = /(\d+(?:\.\d+)?)\s*h(?:eures?)?\s+(?:de\s+)?(?:main[\s-]d.?oeuvre|mo\b|pose|travail)/.exec(t);
   if (hoursMatch) laborHours = parseNumber(hoursMatch[1]);
-  if (laborRef && laborHours > 0) add(laborRef, laborHours, "main-d'œuvre");
+  if (laborRef && laborHours > 0) {
+    add(
+      laborRef,
+      laborHours,
+      "main-d'œuvre",
+      hoursMatch
+        ? `Main-d'œuvre indiquée dans la demande : ${formatNumber(laborHours)} h.`
+        : `Main-d'œuvre estimée à ${formatNumber(laborHours)} h pour ces travaux (au taux de votre catalogue).`,
+    );
+  }
 
   // ---- Marques absentes du catalogue --------------------------------------
   const catalogBrands = ["daikin", "atlantic", "thermor", "viessmann", "frico", "aldes", "sauermann", "grundfos"];
@@ -242,18 +249,6 @@ function analyze(prompt: string): Analysis {
   };
 }
 
-function recommendVat(context: QuoteDraftContext, energyRenovation: boolean): { rate: VatRate; reason: string } {
-  if (context.clientType === "professionnel") return { rate: 20, reason: "Client professionnel : TVA à 20 %." };
-  if (context.housingOver2Years === false) return { rate: 20, reason: "Logement achevé depuis moins de 2 ans : TVA à 20 %." };
-  if (energyRenovation) {
-    return {
-      rate: 5.5,
-      reason: "Travaux d'amélioration de la performance énergétique dans un logement de plus de 2 ans : TVA à 5,5 %.",
-    };
-  }
-  return { rate: 10, reason: "Travaux de rénovation dans un logement de plus de 2 ans : TVA à 10 %." };
-}
-
 function toLine(item: CatalogItem, qty: number, vat: VatRate): DocumentLine {
   return {
     id: createId("line"),
@@ -272,20 +267,63 @@ function toLine(item: CatalogItem, qty: number, vat: VatRate): DocumentLine {
   };
 }
 
+const KEY_TERMS: [RegExp, string | ((m: RegExpExecArray) => string)][] = [
+  [/\b(pac|pompe a chaleur)\b/, "pompe à chaleur"],
+  [/air\s*[/-]?\s*eau/, "air/eau"],
+  [/pac air\s*[/-]?\s*air/, "air/air"],
+  [/\b(bi|tri|quadri|multi|mono)[\s-]?splits?\b/, (m) => `${m[1]}-split`],
+  [/\b(clim|climatisation|climatiseur)\b/, "climatisation"],
+  [/(\d+(?:\.\d+)?)\s*kw/, (m) => `${formatNumber(parseNumber(m[1]))} kW`],
+  [/chauffe[\s-]?eau thermo|\bcet\b|ballon thermo/, "chauffe-eau thermodynamique"],
+  [/chaudiere/, "chaudière"],
+  [/fioul/, "fioul"],
+  [/\bvmc\b/, "VMC"],
+  [/rideau d.?air/, "rideau d'air"],
+  [/desembou/, "désembouage"],
+  [/mise en service/, "mise en service"],
+  [/(\d+(?:\.\d+)?)\s*(?:m|ml|metres?)\b\s*(?:de\s+)?liaisons?/, (m) => `${formatNumber(parseNumber(m[1]))} m de liaisons`],
+  [/goulotte/, "goulotte"],
+  [/relevage/, "pompe de relevage"],
+  [/depann|\bpanne\b|fuite/, "dépannage"],
+  [/urgen|week-end|weekend/, "urgence"],
+  [/entretien/, "entretien"],
+  [/remplac/, "remplacement"],
+];
+
+/** Termes métier reconnus dans la demande (affichés à l'utilisateur pendant l'analyse). */
+export function detectKeyTerms(prompt: string): string[] {
+  const t = normalize(prompt);
+  const terms: string[] = [];
+  for (const [re, label] of KEY_TERMS) {
+    const match = re.exec(t);
+    if (!match) continue;
+    const text = typeof label === "string" ? label : label(match);
+    if (!terms.includes(text)) terms.push(text);
+  }
+  return terms;
+}
+
 export function buildQuoteDraft(prompt: string, context: QuoteDraftContext): QuoteDraft {
   const analysis = analyze(prompt);
-  const vat = recommendVat(context, analysis.energyRenovation);
+  const vat = recommendVat({
+    clientType: context.clientType,
+    housingOver2Years: context.housingOver2Years,
+    energyRenovation: analysis.energyRenovation,
+  });
   const byRef = new Map(context.catalog.filter((c) => c.is_active).map((c) => [c.reference, c]));
   const warnings = [...analysis.warnings];
 
   const lines: DocumentLine[] = [];
+  const reasons: Record<string, string> = {};
   for (const w of analysis.wanted) {
     const item = byRef.get(w.ref);
     if (!item) {
       warnings.push(`Article « ${w.label} » introuvable dans votre catalogue : ligne non ajoutée (aucun prix inventé).`);
       continue;
     }
-    lines.push(toLine(item, w.qty, vat.rate));
+    const line = toLine(item, w.qty, vat.rate);
+    reasons[line.id] = w.reason;
+    lines.push(line);
   }
   lines.sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
 
@@ -294,6 +332,8 @@ export function buildQuoteDraft(prompt: string, context: QuoteDraftContext): Quo
     vat_rate: vat.rate,
     vat_reason: vat.reason,
     lines,
+    reasons,
+    detected: detectKeyTerms(prompt),
     suggestions: findMissingItems(lines, context.catalog, prompt),
     warnings,
   };

@@ -94,7 +94,7 @@ export function UrgentActions({
     if (result.ok) {
       setPinned((current) => current.map((p) => (p.quote.id === quote.id ? { ...p, state: "sent" } : p)));
       toast.success(`Relance envoyée — ${quote.reference}`, {
-        description: `${result.channel === "email" ? "E-mail" : "SMS"} à ${result.to} · simulation gratuite (mode démo)`,
+        description: `${result.channel === "email" ? "E-mail" : "SMS"} à ${result.to} avec le lien du portail · simulation gratuite (mode démo)`,
       });
       window.setTimeout(() => setPinned((current) => current.filter((p) => p.quote.id !== quote.id)), 1400);
     } else {
@@ -146,7 +146,7 @@ export function UrgentActions({
               transition={SPRING.layout}
               className={cn("-mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors", state === "sent" && "bg-emerald-50/70")}
             >
-              <Link href={`/clients/${quote.client_id}`} className="group min-w-0 flex-1 focus-visible:outline-none">
+              <Link href={`/quotes/${quote.id}`} className="group min-w-0 flex-1 focus-visible:outline-none">
                 <p className="truncate text-sm font-medium text-slate-900 group-hover:text-primary">{clientName(quote.client_id)}</p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   <span className="font-mono">{quote.reference}</span> · {formatEUR(quote.total_ttc)} TTC

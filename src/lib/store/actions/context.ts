@@ -3,7 +3,10 @@ import type { FieldErrors } from "@/lib/domain/validation";
 /** Contexte d'une mutation métier : instant et auteur (affiché dans la timeline). */
 export interface MutationContext {
   now: Date;
+  /** Nom affiché dans la timeline. */
   actor?: string;
+  /** Utilisateur de démo connecté (auteur des documents). */
+  actorId?: string;
 }
 
 export type MutationResult<T = void> = { ok: true; value: T } | { ok: false; errors: FieldErrors };

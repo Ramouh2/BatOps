@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowLeftIcon,
+  FilePlusIcon,
   KeyRoundIcon,
   MailIcon,
   MapPinIcon,
@@ -143,6 +144,14 @@ export function ClientDetail({ clientId }: { clientId: string }) {
               <PencilIcon />
               Modifier
             </Button>
+            {user && can(user.role, "manage_quotes") ? (
+              <Button asChild variant={client.status === "prospect" ? "outline" : "default"} size="sm">
+                <Link href={`/quotes/new?client=${client.id}`}>
+                  <FilePlusIcon />
+                  Nouveau devis
+                </Link>
+              </Button>
+            ) : null}
             <AnimatePresence initial={false}>
               {client.status === "prospect" ? (
                 <motion.span key="convert" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>

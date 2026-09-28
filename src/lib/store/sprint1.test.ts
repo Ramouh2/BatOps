@@ -22,7 +22,12 @@ const NOW = new Date(2026, 8, 28, 7, 45);
 
 async function boot(storage = createMemoryStorage()) {
   const session = { value: DEMO_USERS.marc as string | null, load: () => session.value, save: (id: string | null) => void (session.value = id) };
-  const store = createBatopsStore({ storage, session, notifications: () => new MockNotificationProvider() });
+  const store = createBatopsStore({
+    storage,
+    session,
+    notifications: () => new MockNotificationProvider(),
+    origin: () => "https://demo.batops.fr",
+  });
   await store.persist.rehydrate();
   store.getState().actions.ensureData(NOW);
   return store;
@@ -255,9 +260,12 @@ describe("Sprint 1 — dashboard", () => {
     const store = await boot();
     const before = store.getState().data!.outbox.length;
     const result = await store.getState().actions.sendQuoteReminder("quo_bernard");
-    expect(result).toEqual({ ok: true, channel: "email", to: "jp.bernard@example.com" });
+    const bernard = store.getState().data!.clients.find((c) => c.id === "cli_bernard")!;
+    const link = `https://demo.batops.fr/portal/${bernard.portal_token}?devis=DEV-2026-0041`;
+    expect(result).toEqual({ ok: true, channel: "email", to: "jp.bernard@example.com", link });
     const data = store.getState().data!;
     expect(data.outbox).toHaveLength(before + 1);
+    expect(data.outbox.at(-1)!.body).toContain(link);
     expect(data.outbox.at(-1)).toMatchObject({ status: "simule", provider_mode: "mock", client_id: "cli_bernard" });
     expect(data.quotes.find((q) => q.id === "quo_bernard")!.last_reminder_at).toBeTruthy();
     expect(selectQuotesToRemind(data, NOW).some((q) => q.id === "quo_bernard")).toBe(false);

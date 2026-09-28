@@ -35,6 +35,8 @@ import type {
   VatRate,
 } from "@/types/batops";
 import { SECTION, defaultSectionFor } from "@/lib/domain/catalog";
+import { CHECKLISTS } from "@/lib/domain/checklists";
+import { defaultQuoteConditions } from "@/lib/domain/quotes";
 import { clientDisplayName } from "@/lib/domain/clients";
 import { addDays, startOfDay, startOfMonth, toDate, toISODate } from "@/lib/domain/dates";
 import { formatEUR, formatDateTime } from "@/lib/domain/format";
@@ -45,7 +47,7 @@ import { DEMO_CATALOG, catalogIdFor } from "./catalog";
 import { demoSignature } from "./signature";
 
 /** Incrémenter à chaque changement incompatible du modèle : les navigateurs re-génèrent la démo. */
-export const DEMO_SCHEMA_VERSION = 1;
+export const DEMO_SCHEMA_VERSION = 2;
 export const DEMO_ORG_ID = "org_climairpro";
 
 export const DEMO_USERS = {
@@ -217,7 +219,7 @@ class SeedBuilder {
       estimated_cost_ht: totals.cost_ht,
       estimated_margin_ht: totals.margin_ht,
       deposit_percent: spec.deposit,
-      conditions: quoteConditions(spec.deposit, spec.vat, this.org.quote_validity_days),
+      conditions: defaultQuoteConditions({ depositPercent: spec.deposit, vatRates: [spec.vat], validityDays: this.org.quote_validity_days }),
       ai_generated: false,
       created_by_user_id: spec.createdBy,
       sent_at: spec.sentAt,
@@ -246,7 +248,7 @@ class SeedBuilder {
     scheduled?: { start: ISODateTime; end: ISODateTime };
     actual?: { start: ISODateTime; end: ISODateTime };
     description?: string;
-    checklist: string[];
+    checklist: readonly string[];
     parts?: PartSpec[];
     vat?: VatRate;
     isBillable?: boolean;
@@ -404,20 +406,6 @@ class SeedBuilder {
       total_ht: round2((row.base_ht * quote.deposit_percent) / 100),
     }));
   }
-}
-
-function quoteConditions(deposit: number, vat: VatRate, validityDays: number): string {
-  const payment =
-    deposit > 0
-      ? `Acompte de ${deposit} % à la signature, solde à réception de facture.`
-      : "Paiement à réception de facture.";
-  const vatText =
-    vat === 5.5
-      ? "TVA à 5,5 % : travaux d'amélioration de la performance énergétique d'un logement de plus de 2 ans (attestation simplifiée)."
-      : vat === 10
-        ? "TVA à 10 % : travaux de rénovation d'un logement de plus de 2 ans (attestation simplifiée)."
-        : "TVA à 20 %.";
-  return `${payment} ${vatText} Devis valable ${validityDays} jours.`;
 }
 
 /** Attribue des références continues par ordre chronologique, avec un ancrage (ex. Bernard = DEV-0041). */
@@ -1297,16 +1285,7 @@ export function createDemoData(now: Date = new Date()): BatopsData {
 
   /* -------------------------- Interventions ------------------------- */
 
-  const CHECK = {
-    installClim: ["Tirage au vide (< 500 microns)", "Test d'étanchéité à l'azote", "Contrôle des pressions et intensités", "Explications d'utilisation au client"],
-    installPac: ["Désembouage et rinçage du réseau", "Remplissage et purge du circuit", "Paramétrage de la loi d'eau", "Contrôle de l'appoint électrique", "Explications d'utilisation au client"],
-    installCet: ["Raccordement du groupe de sécurité", "Remplissage et purge", "Mise en service et paramétrage", "Explications d'utilisation au client"],
-    installChaudiere: ["Contrôle d'étanchéité gaz", "Analyse de combustion", "Réglage des températures", "Explications d'utilisation au client"],
-    depannageClim: ["Contrôle de l'évacuation des condensats", "Contrôle des filtres et de l'échangeur", "Mesure de la température de soufflage", "Test de fonctionnement froid / chaud"],
-    depannageEcs: ["Diagnostic de la production d'eau chaude", "Contrôle brûleur et échangeur", "Remise en service", "Information du gardien"],
-    plomberie: ["Isolement du réseau", "Remplacement des pièces défectueuses", "Remise en eau et purge", "Contrôle d'étanchéité"],
-    maintenanceVmc: ["Nettoyage des bouches d'extraction (échantillon)", "Contrôle courroie et roulements du caisson", "Mesure des débits et dépressions", "Contrôle des pressostats", "Compte-rendu au syndic"],
-  };
+  const CHECK = CHECKLISTS;
 
   const iKieffer = b.intervention({
     id: "int_kieffer",
