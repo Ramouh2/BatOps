@@ -1,0 +1,81 @@
+# CLAUDE.md — BATOPS
+
+SaaS B2B pour entreprises CVC / plomberie / électricité (1–20 techniciens). La **source de vérité produit** est le
+document de cadrage BATOPS fourni par le fondateur (P0/P1/P2, Core Loop, 17 modules, seed ClimAir Pro).
+En cas d'ambiguïté : cadrage > simplicité > fonctionnement réel. Ne jamais ajouter de feature hors cadrage.
+
+## Commandes
+
+```bash
+npm run dev          # http://localhost:3000
+npm run lint         # ESLint (flat config Next)
+npm run typecheck    # tsc --noEmit (strict)
+npm test             # Vitest (src/**/*.test.ts)
+npm run build        # next build
+npm run check        # les 4 à la suite — obligatoire avant de clore un sprint
+```
+
+## Contraintes absolues
+
+- **0 € au départ** : aucune API payante, aucun service externe requis. Tout passe par `src/providers/*`
+  (Mock par défaut). Un provider Live s'ajoutera derrière la même interface, sans toucher l'UI.
+- **Store central unique** (`src/lib/store`) : aucune page ne doit afficher de données statiques. Toute lecture
+  passe par `useData(...)`, toute mutation par une action du store.
+- **Prix** : uniquement issus du catalogue (`data.catalog`). L'IA ne doit jamais inventer un prix ni un fait.
+- **Technicien** (`/tech`) : aucune donnée financière (ni prix, ni marge, ni CA).
+- UI **en français** métier, montants `1 450,00 €` (`formatEUR`), chiffres en `tabular`.
+- Pas de migration destructive, pas de suppression de fichier sans justification.
+
+## Architecture
+
+| Chemin | Rôle |
+| --- | --- |
+| `src/types/batops.ts` | Modèle de données (snake_case = colonnes SQL). Miroir de `supabase/migrations/001_batops_schema.sql` — garder les deux synchronisés. |
+| `src/lib/demo/seed.ts` | `createDemoData(now)` : jeu ClimAir Pro **déterministe et relatif à `now`** (ids lisibles, références ancrées : Bernard = `DEV-2026-0041`, Mercier = `FAC-2026-0084`). |
+| `src/lib/demo/catalog.ts` | Pricebook (prix achat/vente HT, TVA, gabarits d'équipement). |
+| `src/lib/store/store.ts` | `createBatopsStore()` zustand + immer + persist (`batops:data` en localStorage). Session **par onglet** (sessionStorage) + dernier profil. |
+| `src/lib/store/index.ts` | Hooks React : `useData`, `useActions`, `useCurrentUser`, `useNavCounters`, `useNow`. |
+| `src/lib/store/mutations.ts` | Primitives partagées pour les actions métier : `takeReference` (numérotation continue), `logActivity` (timeline client). |
+| `src/lib/store/selectors.ts` | Sélecteurs purs (compteurs, interventions du jour, totaux). |
+| `src/lib/domain/*` | Règles pures : `computeTotals` (TVA par taux, remise, marge), statuts dérivés (`en_retard`, `expire`, `a_planifier`), formats FR, dates locales. |
+| `src/lib/permissions.ts` | 4 rôles (`owner`, `dispatcher`, `technician`, `accountant`), capacités, accès routes, `ROLE_HOME`. |
+| `src/lib/navigation.ts` / `src/lib/modules.ts` | Sidebar (sections, compteurs) / périmètre P0 et sprint de chaque module. |
+| `src/providers/` | `ai/` (devis IA, oublis, rapport, extraction d'appel), `voice/` (Nora V0 + 3 scénarios), `notifications/`, `storage/`, `index.ts` (factory + statut). |
+| `src/components/ui/` | Composants shadcn/ui écrits à la main (le registre shadcn n'est pas joignable depuis l'environnement de dev). |
+| `src/components/layout/` | Shells bureau / terrain, sidebar, topbar, sélecteur de rôle, palette ⌘K, reset démo, garde d'accès. |
+| `src/app/(dashboard)/*` | Espace bureau. `src/app/(field)/tech` app terrain. `src/app/login` entrée démo. |
+
+## Conventions de code
+
+- Dates : `ISODateTime` (instant UTC) et `ISODate` (`YYYY-MM-DD` **local**) → utiliser `toDate`, `toISODate`, `diffInCalendarDays`.
+- Statuts « temporels » **dérivés, jamais stockés** : facture `en_retard`/`partiellement_payee`, devis `expire`,
+  contrat `a_planifier`/`visite_planifiee` (voir `lib/domain/status.ts`). Toujours passer `now` (`useNow()`).
+- Sélecteurs zustand : retourner des **références stables** (`d => d.quotes`), dériver avec `useMemo`
+  (un sélecteur qui crée un tableau à chaque appel provoque une boucle de rendu).
+- `useData` uniquement sous `<BatopsProvider>` (garanti pour toutes les pages). Rien n'est rendu côté serveur
+  avant hydratation : pas de risque d'écart SSR.
+- **Changement du modèle ou de la forme du seed** → incrémenter `DEMO_SCHEMA_VERSION` (`src/lib/demo/seed.ts`) :
+  les navigateurs régénèrent alors la démo automatiquement.
+- Actions métier futures (signer un devis, clôturer une intervention…) : fonction pure `(draft, payload, now)`
+  testée en Vitest, qui met à jour **toutes** les entités liées + `logActivity` + `takeReference`, puis exposée
+  dans `actions` du store.
+- Pages : `page.tsx` serveur (metadata) qui rend un composant client connecté au store.
+- Mobile terrain : boutons `size="field"` (56 px), cartes empilées, pas de tableau horizontal.
+
+## État des sprints
+
+- [x] **Sprint 0** — fondations : types, seed ClimAir Pro, store, providers, shells, rôles, design system, reset.
+- [ ] Sprint 1 — Dashboard, CRM (clients/prospects/équipements/timeline), catalogue.
+- [ ] Sprint 2 — Devis + IA + marge + aperçu A4 + portail `/portal/[token]` + signature.
+- [ ] Sprint 3 — Interventions + planning/dispatch.
+- [ ] Sprint 4 — App `/tech` + photos + rapport PDF.
+- [ ] Sprint 5 — Factures, acomptes, avoirs, paiements, contrats SAV, paramètres éditables.
+- [ ] Sprint 6 — Nora V0 (simulateur vocal, conversion d'appels).
+
+P1 / P2 : ne rien construire avant que le P0 soit réellement fonctionnel.
+
+## Fin de session
+
+Terminer chaque réponse par la section **« RAMOS — CURRENT PRODUCT STATE »** (🟢 / 🟡 / 🔴 / ⚪ par grande
+fonctionnalité, puis MODIFICATIONS, FICHIERS, VALIDATIONS, PROBLÈMES RESTANTS, NEXT STEP). Ne jamais déclarer
+une fonctionnalité terminée si elle ne fonctionne pas réellement.
