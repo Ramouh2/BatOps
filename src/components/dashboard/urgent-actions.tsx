@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { BellRingIcon, ChevronRightIcon, CircleCheckIcon, Loader2Icon, PhoneIncomingIcon, ReceiptTextIcon } from "lucide-react";
+import { BellRingIcon, CalendarClockIcon, ChevronRightIcon, CircleCheckIcon, InboxIcon, Loader2Icon, PhoneIncomingIcon, ReceiptTextIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, Intervention, Quote } from "@/types/batops";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { useActions, useNow } from "@/lib/store";
 import type { InboundRequest } from "@/lib/store/dashboard";
 import { clientDisplayName } from "@/lib/domain/clients";
 import { formatEUR, formatRelativeDay, formatRelativeTime } from "@/lib/domain/format";
-import { CALL_STATUS, URGENCY } from "@/lib/domain/labels";
+import { CALL_STATUS, PRIORITY, URGENCY } from "@/lib/domain/labels";
 import { daysSinceLastQuoteContact } from "@/lib/domain/status";
 import { DURATION, EASE_OUT, listItem, SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -57,14 +57,16 @@ const itemClass =
 
 type ReminderState = "sending" | "sent";
 
-/** Actions urgentes : demandes entrantes, devis à relancer (1 clic), interventions à facturer. */
+/** Actions urgentes : demandes entrantes, interventions à planifier, devis à relancer (1 clic), interventions à facturer. */
 export function UrgentActions({
   requests,
+  toSchedule,
   quotesToRemind,
   readyToInvoice,
   clients,
 }: {
   requests: InboundRequest[];
+  toSchedule: Intervention[];
   quotesToRemind: Quote[];
   readyToInvoice: Intervention[];
   clients: Client[];
@@ -132,6 +134,38 @@ export function UrgentActions({
         ))}
       </Group>
 
+      <Group icon={InboxIcon} title="À planifier" count={toSchedule.length} empty="Toutes les interventions sont planifiées.">
+        {toSchedule.map((job) => (
+          <motion.li
+            key={job.id}
+            layout
+            variants={listItem}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={SPRING.layout}
+            className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2"
+            data-testid="urgent-to-schedule"
+          >
+            <Link href={`/interventions/${job.id}`} className="group min-w-0 flex-1 focus-visible:outline-none">
+              <p className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                <span className="truncate group-hover:text-primary">{clientName(job.client_id)}</span>
+                {job.priority !== "normale" ? <Badge tone={PRIORITY[job.priority].tone}>{PRIORITY[job.priority].label}</Badge> : null}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <span className="font-mono">{job.reference}</span> · {job.title}
+              </p>
+            </Link>
+            <Button asChild size="sm" variant="outline" className="min-w-[6.5rem]">
+              <Link href={`/planning?planifier=${job.id}`} aria-label={`Planifier ${job.reference}`}>
+                <CalendarClockIcon />
+                Planifier
+              </Link>
+            </Button>
+          </motion.li>
+        ))}
+      </Group>
+
       <Group icon={BellRingIcon} title="Devis à relancer" count={quotesToRemind.length} empty="Aucun devis en attente depuis plus de 3 jours.">
         {displayedQuotes.map(({ quote, state }, index) => {
           const days = daysSinceLastQuoteContact(quote, now);
@@ -185,7 +219,7 @@ export function UrgentActions({
       <Group icon={ReceiptTextIcon} title="Terminées, à facturer" count={readyToInvoice.length} empty="Toutes les interventions terminées sont facturées.">
         {readyToInvoice.map((job) => (
           <motion.li key={job.id} layout variants={listItem} initial="initial" animate="animate" exit="exit" transition={SPRING.layout}>
-            <Link href={`/clients/${job.client_id}`} className={itemClass}>
+            <Link href={`/interventions/${job.id}`} className={itemClass}>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-900 group-hover:text-primary">{clientName(job.client_id)}</p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">

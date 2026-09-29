@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DocumentLine } from "@/types/batops";
 import { DEMO_USERS } from "@/lib/demo-data";
+import { addDays, toISODate } from "@/lib/domain/dates";
 import { createId } from "@/lib/domain/ids";
 import { lineTotal } from "@/lib/domain/money";
 import { computeQuoteTotals, defaultQuoteConditions, depositAmount, interventionPlanFromQuote } from "@/lib/domain/quotes";
@@ -124,7 +125,8 @@ describe("Sprint 2 — parcours devis complet relié au store", () => {
     expect(quote.total_ttc).toBe(totals.total_ttc);
     expect(quote.discount_amount_ht).toBe(totals.discount_amount_ht);
     expect(quote.estimated_margin_ht).toBe(totals.margin_ht);
-    expect(quote.valid_until).toBe("2026-10-28");
+    // Dates calculées sur l'horloge réelle des actions (le seed, lui, est figé au 28/09).
+    expect(quote.valid_until).toBe(toISODate(addDays(new Date(), 30)));
     expect(data.calls.find((c) => c.id === "call_mansouri")).toMatchObject({ status: "converti", quote_id: quoteId });
     expect(selectInboundRequests(data).map((r) => r.id)).not.toContain("call_mansouri");
     expect(selectClient360(data, "cli_mansouri", NOW)!.activities[0]).toMatchObject({ type: "quote_created", title: "Devis DEV-2026-0042 créé" });
@@ -233,7 +235,7 @@ describe("Sprint 2 — parcours devis complet relié au store", () => {
     expect(resent.ok).toBe(true);
     quote = store.getState().data!.quotes.find((q) => q.id === "quo_doree_labo")!;
     expect(quote.status).toBe("envoye");
-    expect(quote.issue_date).toBe("2026-09-28");
+    expect(quote.issue_date).toBe(toISODate(new Date()));
 
     const input = await mansouriDraft(store);
     const created = actions.createQuote({ ...input, call_log_id: undefined });

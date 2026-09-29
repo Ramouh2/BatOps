@@ -1,8 +1,13 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { ModuleRoadmap } from "@/components/modules/module-roadmap";
+import { InterventionsView } from "./interventions-view";
 
 export const metadata: Metadata = { title: "Interventions" };
 
 export default function InterventionsPage() {
-  return <ModuleRoadmap module="interventions" />;
+  return (
+    <Suspense>
+      <InterventionsView />
+    </Suspense>
+  );
 }

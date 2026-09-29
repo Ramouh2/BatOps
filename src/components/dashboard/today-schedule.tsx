@@ -10,11 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Swap } from "@/components/motion/swap";
 import { clientDisplayName } from "@/lib/domain/clients";
 import { formatTime } from "@/lib/domain/format";
+import { scheduleOf, segmentOnDay } from "@/lib/domain/planning";
+import { useNow } from "@/lib/store";
 import { INTERVENTION_STATUS, INTERVENTION_TYPE_LABEL, PRIORITY } from "@/lib/domain/labels";
 import { listItem, SPRING } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const LIVE_STATUSES = new Set(["en_route", "sur_place", "en_cours"]);
+const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 /** Programme de la journée : chronologique, statut des techniciens en direct. */
 export function TodaySchedule({
@@ -26,6 +29,7 @@ export function TodaySchedule({
   clients: Client[];
   users: User[];
 }) {
+  const now = useNow();
   if (interventions.length === 0) {
     return <EmptyState icon={CalendarCheckIcon} title="Aucune intervention aujourd'hui" description="Les interventions planifiées pour la journée apparaîtront ici." />;
   }
@@ -38,6 +42,8 @@ export function TodaySchedule({
           const tech = users.find((u) => u.id === job.assigned_technician_id);
           const status = INTERVENTION_STATUS[job.status];
           const live = LIVE_STATUSES.has(job.status);
+          const range = scheduleOf(job);
+          const segment = range ? segmentOnDay(range, now) : null;
           return (
             <motion.li
               key={job.id}
@@ -49,13 +55,16 @@ export function TodaySchedule({
               transition={{ ...SPRING.layout, delay: index * 0.04 }}
             >
               <Link
-                href={`/clients/${job.client_id}`}
+                href={`/interventions/${job.id}`}
                 className="group -mx-2 flex items-start gap-3 rounded-md px-2 py-3 transition-colors hover:bg-slate-50 focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
               >
                 <div className="w-24 shrink-0 pt-0.5">
                   <p className="text-sm font-semibold text-slate-900 tabular">
-                    {job.scheduled_start ? formatTime(job.scheduled_start) : "—"}
-                    <span className="font-normal text-slate-400"> – {job.scheduled_end ? formatTime(job.scheduled_end) : ""}</span>
+                    {segment ? (segment.continuesBefore ? "Suite" : hhmm(segment.startMin)) : job.scheduled_start ? formatTime(job.scheduled_start) : "—"}
+                    <span className="font-normal text-slate-400">
+                      {" "}
+                      – {segment ? `${hhmm(segment.endMin)}${segment.continuesAfter ? " →" : ""}` : job.scheduled_end ? formatTime(job.scheduled_end) : ""}
+                    </span>
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">{INTERVENTION_TYPE_LABEL[job.type]}</p>
                 </div>

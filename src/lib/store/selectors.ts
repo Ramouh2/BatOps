@@ -13,6 +13,7 @@ import {
   isReadyToInvoice,
 } from "@/lib/domain/status";
 import { round2 } from "@/lib/domain/money";
+import { scheduleOf, segmentOnDay } from "@/lib/domain/planning";
 
 /**
  * Événements du plus récent au plus ancien. À instant égal (plusieurs événements journalisés dans la même
@@ -61,9 +62,14 @@ export function selectNavCounters(data: BatopsData, now: Date): NavCounters {
 }
 
 /** Interventions du jour, triées chronologiquement (optionnellement pour un technicien). */
+/** Interventions présentes un jour donné (y compris le jour 2, 3… d'un chantier étalé sur plusieurs jours ouvrés). */
 export function selectInterventionsOfDay(data: Pick<BatopsData, "interventions">, day: Date, technicianId?: string) {
   return data.interventions
-    .filter((i) => i.scheduled_start && isSameDay(toDate(i.scheduled_start), day) && i.status !== "annulee")
+    .filter((i) => {
+      if (!i.scheduled_start || i.status === "annulee") return false;
+      const range = scheduleOf(i);
+      return range ? segmentOnDay(range, day) !== null : isSameDay(toDate(i.scheduled_start), day);
+    })
     .filter((i) => !technicianId || i.assigned_technician_id === technicianId)
     .sort((a, b) => (a.scheduled_start ?? "").localeCompare(b.scheduled_start ?? ""));
 }

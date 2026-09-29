@@ -23,7 +23,8 @@ import { ActivityIcon } from "@/components/shared/activity-meta";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Reveal } from "@/components/motion/reveal";
 import { SuccessCheck } from "@/components/motion/success-check";
-import { useNow } from "@/lib/store";
+import { useCurrentUser, useNow } from "@/lib/store";
+import { can } from "@/lib/permissions";
 import { diffInCalendarDays, toDate } from "@/lib/domain/dates";
 import { formatDate, formatDateTime, formatDuration, formatRelativeTime } from "@/lib/domain/format";
 import { INTERVENTION_STATUS, INTERVENTION_TYPE_LABEL } from "@/lib/domain/labels";
@@ -90,6 +91,8 @@ export function QuoteDetailBody({
   onRemind: () => void;
 }) {
   const now = useNow();
+  const user = useCurrentUser();
+  const canOpenInterventions = user ? can(user.role, "manage_interventions") : false;
   const status = getQuoteDisplayStatus(quote, now);
   const daysLeft = diffInCalendarDays(now, toDate(quote.valid_until));
   const tech = intervention?.assigned_technician_id ? data.users.find((u) => u.id === intervention.assigned_technician_id) : undefined;
@@ -163,11 +166,27 @@ export function QuoteDetailBody({
               <p className="text-xs text-muted-foreground">
                 {intervention.scheduled_start
                   ? `Planifiée le ${formatDateTime(intervention.scheduled_start)}${tech ? ` avec ${tech.full_name}` : ""}.`
-                  : "À planifier : elle apparaît dans le compteur « Planning » (module livré au Sprint 3)."}
+                  : "À planifier : elle attend dans la colonne « À planifier » du planning."}
               </p>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/clients/${client.id}`}>Voir la fiche client</Link>
-              </Button>
+              {canOpenInterventions ? (
+                <div className="flex flex-wrap gap-2">
+                  {intervention.status === "nouvelle" ? (
+                    <Button asChild size="sm" data-testid="quote-plan-intervention">
+                      <Link href={`/planning?planifier=${intervention.id}`}>
+                        <CalendarClockIcon />
+                        Planifier
+                      </Link>
+                    </Button>
+                  ) : null}
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/interventions/${intervention.id}`}>Ouvrir la fiche intervention</Link>
+                  </Button>
+                </div>
+              ) : (
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/clients/${client.id}`}>Voir la fiche client</Link>
+                </Button>
+              )}
             </motion.div>
           </Panel>
         ) : null}

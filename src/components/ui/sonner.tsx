@@ -10,7 +10,7 @@ function Toaster(props: ToasterProps) {
       toastOptions={{
         classNames: {
           toast: "!rounded-lg !border-border !shadow-lg !font-sans",
-          description: "!text-muted-foreground",
+          description: "!text-muted-foreground whitespace-pre-line",
         },
       }}
       {...props}

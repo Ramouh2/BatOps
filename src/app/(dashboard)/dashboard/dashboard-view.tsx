@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
+import Link from "next/link";
 import { ArrowDownRightIcon, ArrowUpRightIcon, CalendarClockIcon, FileTextIcon, ReceiptTextIcon, WalletIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
@@ -22,6 +23,7 @@ import {
   selectQuotesToRemind,
   selectReadyToInvoice,
   selectRecentActivities,
+  selectToSchedule,
 } from "@/lib/store/dashboard";
 import { formatDateLong, formatEURCompact, formatPercent } from "@/lib/domain/format";
 import { cn } from "@/lib/utils";
@@ -64,6 +66,7 @@ export function DashboardView() {
       series: selectCashSeries(data, now),
       today: selectInterventionsOfDay(data, now),
       requests: selectInboundRequests(data),
+      toSchedule: selectToSchedule(data),
       quotesToRemind: selectQuotesToRemind(data, now),
       readyToInvoice: selectReadyToInvoice(data),
       recent: selectRecentActivities(data, 8),
@@ -154,8 +157,13 @@ export function DashboardView() {
             <Panel
               title="Programme de la journée"
               aside={
-                <span className="tabular">
-                  {kpis.todayDone}/{kpis.todayTotal} terminée{kpis.todayDone > 1 ? "s" : ""}
+                <span className="flex items-center gap-3">
+                  <span className="tabular">
+                    {kpis.todayDone}/{kpis.todayTotal} terminée{kpis.todayDone > 1 ? "s" : ""}
+                  </span>
+                  <Link href="/planning" className="font-medium text-primary hover:underline" data-testid="dashboard-planning-link">
+                    Planning →
+                  </Link>
                 </span>
               }
             >
@@ -173,6 +181,7 @@ export function DashboardView() {
             <Panel title="Actions urgentes">
               <UrgentActions
                 requests={view.requests}
+                toSchedule={view.toSchedule}
                 quotesToRemind={view.quotesToRemind}
                 readyToInvoice={view.readyToInvoice}
                 clients={data.clients}

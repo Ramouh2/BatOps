@@ -45,6 +45,7 @@ const META: Record<ActivityType, { icon: LucideIcon; tint: string }> = {
   quote_refused: { icon: FileXIcon, tint: "bg-rose-50 text-rose-700 ring-rose-200" },
   intervention_created: { icon: WrenchIcon, tint: "bg-slate-100 text-slate-600 ring-slate-200" },
   intervention_scheduled: { icon: CalendarCheckIcon, tint: "bg-blue-50 text-blue-700 ring-blue-200" },
+  intervention_updated: { icon: PencilLineIcon, tint: "bg-slate-100 text-slate-600 ring-slate-200" },
   intervention_status: { icon: RefreshCwIcon, tint: "bg-blue-50 text-blue-700 ring-blue-200" },
   intervention_completed: { icon: CircleCheckBigIcon, tint: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
   photos_added: { icon: CameraIcon, tint: "bg-slate-100 text-slate-600 ring-slate-200" },

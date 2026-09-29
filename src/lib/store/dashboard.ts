@@ -8,6 +8,7 @@ import {
   daysSinceLastQuoteContact,
   getInvoiceDisplayStatus,
   invoiceBalance,
+  isInterventionToSchedule,
   isQuoteAwaitingResponse,
   isReadyToInvoice,
   quoteNeedsReminder,
@@ -159,6 +160,15 @@ export function selectQuotesToRemind(data: BatopsData, now: Date): Quote[] {
   return data.quotes
     .filter((q) => quoteNeedsReminder(q, now))
     .sort((a, b) => (daysSinceLastQuoteContact(b, now) ?? 0) - (daysSinceLastQuoteContact(a, now) ?? 0));
+}
+
+const PRIORITY_RANK = { urgente: 0, haute: 1, normale: 2 } as const;
+
+/** Interventions « À planifier » (devis signés, appels, contrats) : urgences d'abord, puis les plus anciennes. */
+export function selectToSchedule(data: BatopsData): Intervention[] {
+  return data.interventions
+    .filter(isInterventionToSchedule)
+    .sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.created_at.localeCompare(b.created_at));
 }
 
 export function selectReadyToInvoice(data: BatopsData): Intervention[] {

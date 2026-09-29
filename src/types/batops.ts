@@ -454,6 +454,7 @@ export type ActivityType =
   | "quote_refused"
   | "intervention_created"
   | "intervention_scheduled"
+  | "intervention_updated"
   | "intervention_status"
   | "intervention_completed"
   | "photos_added"

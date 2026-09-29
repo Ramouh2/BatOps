@@ -120,7 +120,12 @@ export function ClientInterventions({ interventions, users }: { interventions: I
               )}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-slate-900">{job.title}</span>
+              <Link
+                href={`/interventions/${job.id}`}
+                className="block truncate text-sm font-medium text-slate-900 outline-none after:absolute after:inset-0 after:content-[''] hover:text-primary focus-visible:after:rounded-md focus-visible:after:ring-[3px] focus-visible:after:ring-ring/40"
+              >
+                {job.title}
+              </Link>
               <span className="text-xs text-muted-foreground">
                 <span className="font-mono">{job.reference}</span> · {INTERVENTION_TYPE_LABEL[job.type]}
                 {job.site_label ? ` · ${job.site_label}` : ""}

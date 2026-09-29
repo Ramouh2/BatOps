@@ -17,12 +17,15 @@ import {
   validateCatalogItemInput,
   validateClientInput,
   validateEquipmentInput,
+  validateInterventionInput,
   validateQuoteInput,
   type CatalogItemInput,
   type ClientInput,
   type EquipmentInput,
+  type InterventionInput,
   type QuoteInput,
 } from "@/lib/domain/validation";
+import { detectConflicts, requiresRefrigerantSkill, scheduleOf, type Conflict } from "@/lib/domain/planning";
 import type { NotificationProvider } from "@/providers/notifications/notification.provider";
 import { localStateStorage, safeGet, safeSet } from "./safe-storage";
 import { fail, ok, type MutationContext, type MutationResult } from "./actions/context";
@@ -61,6 +64,16 @@ import {
   type SignatureInput,
   type SignatureResult,
 } from "./actions/quotes";
+import {
+  cancelIntervention,
+  createIntervention,
+  scheduleIntervention,
+  unscheduleIntervention,
+  updateIntervention,
+  validateSchedule,
+  type ScheduleChange,
+  type ScheduleInput,
+} from "./actions/interventions";
 
 export const DATA_STORAGE_KEY = "batops:data";
 export const SESSION_STORAGE_KEY = "batops:session";
@@ -119,6 +132,15 @@ export interface BatopsActions {
   /** Signature : devis signé + intervention préparée « À planifier ». */
   signQuote(input: SignatureInput): MutationResult<SignatureResult>;
   refuseQuote(input: RefusalInput): MutationResult<true>;
+
+  /* ---- Interventions & planning ---- */
+  /** Planifie, déplace, réaffecte ou redimensionne. Les conflits restants sont renvoyés (jamais bloquants). */
+  scheduleIntervention(input: ScheduleInput): MutationResult<{ change: ScheduleChange; conflicts: Conflict[] }>;
+  /** Remet une intervention planifiée dans « À planifier ». */
+  unscheduleIntervention(interventionId: string): boolean;
+  createIntervention(input: InterventionInput): MutationResult<string>;
+  updateIntervention(interventionId: string, input: InterventionInput): MutationResult<string[]>;
+  cancelIntervention(interventionId: string, reason: string): MutationResult<true>;
 }
 
 export interface SendOutcome {
@@ -153,6 +175,8 @@ export interface CreateBatopsStoreOptions {
   notifications?: () => NotificationProvider;
   /** Origine des liens du portail client (par défaut l'URL de l'application). */
   origin?: () => string;
+  /** Horloge des mutations (tests déterministes) ; par défaut l'heure réelle. */
+  clock?: () => Date;
 }
 
 function defaultOrigin(): string {
@@ -172,10 +196,11 @@ export function createBatopsStore(options: CreateBatopsStoreOptions = {}) {
     persist(
       immer((set, get) => {
         /** Instant + auteur (profil de démo courant) de chaque mutation. */
+        const clock = () => (options.clock ? options.clock() : new Date());
         const context = (): MutationContext => {
           const { data, session } = get();
           const user = data?.users.find((u) => u.id === session.userId);
-          return { now: new Date(), actor: user?.full_name, actorId: user?.id };
+          return { now: clock(), actor: user?.full_name, actorId: user?.id };
         };
         const origin = () => (options.origin ?? defaultOrigin)();
         const notifications = async () => (options.notifications ? options.notifications() : defaultNotifications());
@@ -299,7 +324,7 @@ export function createBatopsStore(options: CreateBatopsStoreOptions = {}) {
             return { ok: sent, channel: message.channel, to: message.to, link: message.link };
           },
           sendQuoteReminder: async (quoteId) => {
-            const message = buildQuoteReminder(data(), quoteId, new Date(), origin());
+            const message = buildQuoteReminder(data(), quoteId, clock(), origin());
             if (!message) return { ok: false };
             const result = await (await notifications()).send(message);
             mutate((draft, ctx) => applyQuoteReminder(draft, quoteId, message, result, ctx));
@@ -313,11 +338,52 @@ export function createBatopsStore(options: CreateBatopsStoreOptions = {}) {
           },
           addQuoteComment: (quoteId, text) => mutate((draft, ctx) => addQuoteComment(draft, quoteId, text, ctx)),
           signQuote: (input) => {
-            const errors = validateSignature(data(), input, new Date());
+            const errors = validateSignature(data(), input, clock());
             if (hasErrors(errors)) return fail(errors);
             const result = mutate((draft, ctx) => signQuote(draft, input, ctx));
             return result ? ok(result) : fail({ quote: "Signature impossible." });
           },
+          scheduleIntervention: (input) => {
+            const errors = validateSchedule(data(), input);
+            if (hasErrors(errors)) return fail(errors);
+            const change = mutate((draft, ctx) => scheduleIntervention(draft, input, ctx));
+            const fresh = data();
+            const intervention = fresh.interventions.find((i) => i.id === input.intervention_id)!;
+            const range = scheduleOf(intervention)!;
+            const conflicts = detectConflicts(
+              {
+                id: intervention.id,
+                technician_id: input.technician_id,
+                start: range.start,
+                end: range.end,
+                needsRefrigerant: requiresRefrigerantSkill(intervention, fresh.catalog, fresh.equipment),
+                priority: intervention.priority,
+              },
+              { interventions: fresh.interventions, users: fresh.users },
+            );
+            return ok({ change, conflicts });
+          },
+          unscheduleIntervention: (interventionId) => mutate((draft, ctx) => unscheduleIntervention(draft, interventionId, ctx)),
+          createIntervention: (input) => {
+            const errors = validateInterventionInput(input, data());
+            if (hasErrors(errors)) return fail(errors);
+            return ok(mutate((draft, ctx) => createIntervention(draft, input, ctx)));
+          },
+          updateIntervention: (interventionId, input) => {
+            const intervention = data().interventions.find((i) => i.id === interventionId);
+            if (!intervention) return fail({ intervention: "Intervention introuvable." });
+            if (intervention.status === "terminee" || intervention.status === "annulee") return fail({ intervention: "Intervention close : elle ne se modifie plus." });
+            const errors = validateInterventionInput({ ...input, client_id: intervention.client_id }, data());
+            if (hasErrors(errors)) return fail(errors);
+            return ok(mutate((draft, ctx) => updateIntervention(draft, interventionId, input, ctx)));
+          },
+          cancelIntervention: (interventionId, reason) => {
+            if (!reason.trim()) return fail({ reason: "Indiquez le motif de l'annulation." });
+            return mutate((draft, ctx) => cancelIntervention(draft, interventionId, reason, ctx))
+              ? ok(true as const)
+              : fail({ intervention: "Cette intervention ne peut plus être annulée." });
+          },
+
           refuseQuote: (input) => {
             const errors = validateRefusal(data(), input);
             if (hasErrors(errors)) return fail(errors);

@@ -128,7 +128,7 @@ export const MODULES: Record<ModuleKey, ModuleInfo> = {
     sprint: 4,
     features: [
       "Statut en 1 tap : En route → Sur place → Terminée",
-      "Itinéraire Waze / Maps et appel client en 1 tap",
+      "Appel client et itinéraire Waze en 1 tap (Google Maps déjà disponible)",
       "Photos avant/après, pièces utilisées, note reformulée par l'IA",
       "Signature du client au doigt et rapport PDF immédiat",
     ],

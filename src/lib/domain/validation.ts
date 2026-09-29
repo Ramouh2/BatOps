@@ -12,6 +12,8 @@ import type {
   ClientSource,
   ClientType,
   EquipmentCategory,
+  InterventionPriority,
+  InterventionType,
   RefrigerantType,
   VatRate,
 } from "@/types/batops";
@@ -316,6 +318,67 @@ export function normalizeQuoteInput(input: QuoteInput): QuoteInput {
     deposit_percent: round2(input.deposit_percent),
     conditions: trimOrUndefined(input.conditions),
     notes: trimOrUndefined(input.notes),
+    call_log_id: input.call_log_id || undefined,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Interventions                                                       */
+/* ------------------------------------------------------------------ */
+
+export interface InterventionInput {
+  client_id: string;
+  title: string;
+  type: InterventionType;
+  priority: InterventionPriority;
+  description?: string;
+  /** Durée de travail estimée (minutes). */
+  duration_minutes: number;
+  address: string;
+  postal_code: string;
+  city: string;
+  site_label?: string;
+  equipment_id?: string;
+  is_billable: boolean;
+  call_log_id?: string;
+}
+
+export type InterventionField = keyof InterventionInput;
+
+/** Durée maximale d'une intervention : 10 jours de travail. */
+export const MAX_INTERVENTION_MINUTES = 10 * 600;
+
+export function validateInterventionInput(
+  input: InterventionInput,
+  data: Pick<BatopsData, "clients" | "equipment">,
+): FieldErrors<InterventionField> {
+  const errors: FieldErrors<InterventionField> = {};
+  if (!data.clients.some((c) => c.id === input.client_id)) errors.client_id = "Choisissez un client.";
+  if (!input.title.trim()) errors.title = "Décrivez l'intervention en quelques mots.";
+  else if (input.title.trim().length > 160) errors.title = "Titre trop long (160 caractères max).";
+  if (!Number.isFinite(input.duration_minutes) || input.duration_minutes < 15 || input.duration_minutes > MAX_INTERVENTION_MINUTES) {
+    errors.duration_minutes = "Durée entre 15 min et 10 jours de travail.";
+  }
+  if (!input.address.trim()) errors.address = "Adresse requise.";
+  if (!/^\d{5}$/.test(input.postal_code.trim())) errors.postal_code = "Code postal à 5 chiffres.";
+  if (!input.city.trim()) errors.city = "Ville requise.";
+  if (input.equipment_id && !data.equipment.some((e) => e.id === input.equipment_id && e.client_id === input.client_id)) {
+    errors.equipment_id = "Cet équipement n'appartient pas au client.";
+  }
+  return errors;
+}
+
+export function normalizeInterventionInput(input: InterventionInput): InterventionInput {
+  return {
+    ...input,
+    title: input.title.trim(),
+    description: trimOrUndefined(input.description),
+    duration_minutes: Math.round(input.duration_minutes / 15) * 15,
+    address: input.address.trim(),
+    postal_code: input.postal_code.trim(),
+    city: input.city.trim(),
+    site_label: trimOrUndefined(input.site_label),
+    equipment_id: input.equipment_id || undefined,
     call_log_id: input.call_log_id || undefined,
   };
 }

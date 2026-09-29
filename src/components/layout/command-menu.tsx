@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { FilePlusIcon, FileTextIcon, RotateCcwIcon } from "lucide-react";
+import { FilePlusIcon, FileTextIcon, RotateCcwIcon, SquarePlusIcon, WrenchIcon } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -18,7 +18,7 @@ import { useCurrentUser, useData } from "@/lib/store";
 import { useUi } from "@/lib/store/ui";
 import { can } from "@/lib/permissions";
 import { FIELD_APP_ITEM, navSectionsFor } from "@/lib/navigation";
-import { CLIENT_STATUS, QUOTE_STATUS, ROLE_LABEL } from "@/lib/domain/labels";
+import { CLIENT_STATUS, INTERVENTION_STATUS, QUOTE_STATUS, ROLE_LABEL } from "@/lib/domain/labels";
 import { clientDisplayName } from "@/lib/domain/clients";
 import { useSwitchProfile } from "./use-switch-profile";
 
@@ -31,6 +31,7 @@ export function CommandMenu() {
   const users = useData((d) => d.users);
   const clients = useData((d) => d.clients);
   const quotes = useData((d) => d.quotes);
+  const interventions = useData((d) => d.interventions);
   const switchProfile = useSwitchProfile();
   const router = useRouter();
 
@@ -113,6 +114,35 @@ export function CommandMenu() {
                       <span className="shrink-0 font-mono text-xs">{quote.reference}</span>
                       <span className="truncate">{client ? clientDisplayName(client) : quote.title}</span>
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground">{QUOTE_STATUS[quote.status].label}</span>
+                    </CommandItem>
+                  );
+                })}
+            </CommandGroup>
+          </>
+        ) : null}
+        {can(user.role, "manage_interventions") ? (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Interventions">
+              <CommandItem value="nouvelle intervention créer dépannage" onSelect={() => run(() => router.push("/interventions?nouvelle=1"))}>
+                <SquarePlusIcon />
+                Nouvelle intervention
+              </CommandItem>
+              {[...interventions]
+                .filter((i) => i.status !== "annulee")
+                .sort((a, b) => b.reference.localeCompare(a.reference))
+                .map((job) => {
+                  const client = clients.find((c) => c.id === job.client_id);
+                  return (
+                    <CommandItem
+                      key={job.id}
+                      value={`intervention ${job.reference} ${job.title} ${client ? clientDisplayName(client) : ""} ${job.city}`}
+                      onSelect={() => run(() => router.push(`/interventions/${job.id}`))}
+                    >
+                      <WrenchIcon />
+                      <span className="shrink-0 font-mono text-xs">{job.reference}</span>
+                      <span className="truncate">{client ? clientDisplayName(client) : job.title}</span>
+                      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{INTERVENTION_STATUS[job.status].label}</span>
                     </CommandItem>
                   );
                 })}
